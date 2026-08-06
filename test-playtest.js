@@ -65,6 +65,7 @@ function assert(cond, msg) {
     let st = await readState(a.code, a.id);
     assert(st.trumpRules === false, 'default trumpRules should be false');
     assert(st.trump === '2', 'trump should be 2');
+    assert(st.scores && st.scores.red === 0 && st.scores.blue === 0, 'scores start at 0');
     await post('/api/start', { code: a.code, id: a.id });
     await new Promise((r) => setTimeout(r, 400));
     st = await readState(a.code, a.id);
@@ -107,13 +108,17 @@ function assert(cond, msg) {
       if (f === '/') {
         assert(text.includes('trumpRules'), 'lobby has trump checkbox');
         assert(text.includes('playedBy'), 'board has playedBy');
+        assert(text.includes('redScore'), 'scoreboard uses scores');
       }
       if (f === '/game.js') {
         assert(text.includes('count <= 10'), 'seat count gate');
         assert(text.includes('playedBy'), 'playedBy render');
+        assert(text.includes('layoutHand'), 'fan layout');
+        assert(text.includes('bindHandDrag') || text.includes('onpointermove'), 'drag select');
+        assert(text.includes('scores'), 'renders scores');
       }
       if (f === '/style.css') {
-        assert(text.includes('flex-wrap'), 'hand wrap css');
+        assert(text.includes('touch-action:none') || text.includes('touch-action: none'), 'hand drag css');
       }
     }
     console.log('OK assets and UI markers');

@@ -26,6 +26,7 @@ check('default trumpRules is off', () => {
   const r = newRoom();
   assert.strictEqual(r.trumpRules, false);
   assert.strictEqual(r.trump, '2');
+  assert.deepStrictEqual(r.scores, { red: 0, blue: 0 });
 });
 
 check('seat count hidden when >10', () => {
@@ -52,6 +53,7 @@ check('state exposes table player for playedBy UI', () => {
     assert.ok(st.players.some((x) => x.id === st.table.player));
   }
   assert.strictEqual(st.trumpRules, false);
+  assert.deepStrictEqual(st.scores, { red: 0, blue: 0 });
 });
 
 check('full round with trumpRules off stays at 2', () => {
@@ -67,6 +69,26 @@ check('full round with trumpRules off stays at 2', () => {
   assert.strictEqual(r.trump, '2');
   assert.strictEqual(r.levels.red, '2');
   assert.strictEqual(r.levels.blue, '2');
+  assert.ok(r.scores);
+  assert.strictEqual(typeof r.scores.red, 'number');
+  assert.strictEqual(typeof r.scores.blue, 'number');
+});
+
+check('settle accumulates score from 0', () => {
+  const r = newRoom({ trumpRules: true });
+  addPlayer(r, 'H');
+  start(r);
+  r.banker = 'red';
+  r.bankerSeat = 0;
+  r.levels = { red: '2', blue: '2' };
+  r.scores = { red: 0, blue: 0 };
+  r.ranking = [r.players[0].id, r.players[2].id, r.players[4].id, r.players[1].id, r.players[3].id, r.players[5].id];
+  r.players.forEach((p) => {
+    if (!p.hand.length) p.hand = [{ id: 'x', r: '3', s: '♠' }, { id: 'y', r: '4', s: '♠' }];
+  });
+  settle(r);
+  assert.strictEqual(r.scores.red, 8);
+  assert.strictEqual(r.scores.blue, 0);
 });
 
 if (failed) {
