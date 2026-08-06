@@ -142,7 +142,7 @@ check('AI does not beat teammate lightly', () => {
 });
 
 check('settle case1 banker 123 upgrades', () => {
-  const r = newRoom();
+  const r = newRoom({ trumpRules: true });
   addPlayer(r, 'H');
   start(r);
   r.banker = 'red';
@@ -162,8 +162,27 @@ check('settle case1 banker 123 upgrades', () => {
   assert.strictEqual(r.result.switchBanker, false);
 });
 
+check('settle without trumpRules keeps trump 2', () => {
+  const r = newRoom({ trumpRules: false });
+  addPlayer(r, 'H');
+  start(r);
+  assert.strictEqual(r.trump, '2');
+  assert.strictEqual(r.trumpRules, false);
+  r.banker = 'red';
+  r.bankerSeat = 0;
+  r.levels = { red: '2', blue: '2' };
+  r.ranking = [r.players[0].id, r.players[2].id, r.players[4].id, r.players[1].id, r.players[3].id, r.players[5].id];
+  r.players.forEach((p) => {
+    if (!p.hand.length) p.hand = [C('3'), C('4')];
+  });
+  settle(r);
+  assert.strictEqual(r.trump, '2');
+  assert.strictEqual(r.levels.red, '2');
+  assert.strictEqual(r.result.gain, 0);
+});
+
 check('settle case8 other 123 switches banker', () => {
-  const r = newRoom();
+  const r = newRoom({ trumpRules: true });
   addPlayer(r, 'H');
   start(r);
   r.banker = 'red';

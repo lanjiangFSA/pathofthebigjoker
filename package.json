@@ -5,7 +5,7 @@
   "description": "大怪路子 - browser co-op monster survival game",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-rules.js && node test-collab.js"
+    "test": "node test-rules.js && node test-collab.js && node test-ui-fixes.js"
   },
   "engines": { "node": ">=18" }
 }
