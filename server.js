@@ -3,8 +3,9 @@ const PORT=process.env.PORT||3000,rooms=new Map(),streams=new Map(),pub=path.joi
 const ranks=['3','4','5','6','7','8','9','10','J','Q','K','A','2','小怪','大怪'],gradeRanks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'],suits=['♠','♥','♣','♦'],botNames=['小虎机','阿福','路子王','小囡','老克勒'];
 const uid=()=>crypto.randomBytes(7).toString('hex'),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase(),teamOf=i=>i%2?'blue':'red';
 function deck(){let a=[];for(let n=0;n<3;n++){for(const s of suits)for(const r of ranks.slice(0,13))a.push({id:uid(),r,s});a.push({id:uid(),r:'小怪',s:'★'});a.push({id:uid(),r:'大怪',s:'★'});}return a.sort(()=>Math.random()-.5)}
-function rankValue(r,trump){if(r==='大怪')return 30;if(r==='小怪')return 29;return (ranks.indexOf(r)+15-(ranks.indexOf(trump)+1))%13}
-function sort(hand,trump){return hand.sort((a,b)=>rankValue(a.r,trump)-rankValue(b.r,trump)||a.s.localeCompare(b.s))}
+function rankValue(r,trump){if(r==='大怪')return 30;if(r==='小怪')return 29;const face=ranks.indexOf(r),lead=ranks.indexOf(trump);return (face-lead-1+26)%13}
+// Higher cards are presented first: big joker, small joker, trump, A ... 3.
+function sort(hand,trump){return hand.sort((a,b)=>rankValue(b.r,trump)-rankValue(a.r,trump)||a.s.localeCompare(b.s))}
 function newRoom(){let c=code();while(rooms.has(c))c=code();return {code:c,players:[],host:null,started:false,trump:'2',levels:{red:'2',blue:'2'},banker:'red',turn:0,table:null,passes:0,ranking:[],result:null,message:'等待牌友入座'} }
 function addPlayer(r,name,bot=false){if(r.players.length>=6)throw Error('牌桌已满（6 人）');let p={id:uid(),name:(name||'牌友').trim().slice(0,12),hand:[],bot};r.players.push(p);if(!r.host&&!bot)r.host=p.id;r.message=`${p.name}${bot?'（AI）':''} 入座（${r.players.length}/6）`;return p}
 function addBots(r){let n=0;while(r.players.length<6){let name=botNames[n++%botNames.length];while(r.players.some(p=>p.name===name))name+=Math.ceil(Math.random()*9);addPlayer(r,name,true)}}
