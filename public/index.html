@@ -26,9 +26,9 @@
       <div>将牌 <b id="trump">2</b>　<span id="trumpMode"></span>　<span id="status"></span></div>
     </header>
     <div class="scoreboard">
-      <div class="redscore">红队 <b id="redLevel">2</b><small id="redBanker"></small></div>
+      <div class="redscore">红队 <b id="redScore">0</b><small id="redLevel"></small><small id="redBanker"></small></div>
       <div id="scoreHint">本局结算：剩余对手人数决定升级；换庄少升一级</div>
-      <div class="bluescore">蓝队 <b id="blueLevel">2</b><small id="blueBanker"></small></div>
+      <div class="bluescore">蓝队 <b id="blueScore">0</b><small id="blueLevel"></small><small id="blueBanker"></small></div>
     </div>
     <div class="seats" id="seats"></div>
     <div class="board">
@@ -46,7 +46,7 @@
       <button id="play">出牌</button>
     </div>
     <div id="hand"></div>
-    <footer>规则：单张、对子、三张、五路（杂顺／同花／三带两／四带一／同花顺／五同）；怪牌可补非单张组合</footer>
+    <footer>规则：单张、对子、三张、五路（杂顺／同花／三带两／四带一／同花顺／五同）；怪牌可补非单张组合。手牌可拖动多选。</footer>
   </section>
 </main>
 <script src="game.js"></script>
