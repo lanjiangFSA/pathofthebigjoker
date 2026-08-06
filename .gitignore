@@ -1,0 +1,10 @@
+# Node.js dependencies and local configuration
+node_modules/
+.env
+.env.*
+
+# Logs and OS/editor files
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
