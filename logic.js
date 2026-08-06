@@ -264,6 +264,7 @@ function newRoom(opts = {}) {
     trumpRules,
     trump: '2',
     levels: { red: '2', blue: '2' },
+    scores: { red: 0, blue: 0 },
     banker: 'red',
     bankerSeat: 0,
     leadSeat: 0,
@@ -526,10 +527,12 @@ function settle(r) {
   r.trump = r.trumpRules ? r.levels[r.banker] : '2';
   r.leadSeat = order[0].seat;
   r.started = false;
+  if (!r.scores) r.scores = { red: 0, blue: 0 };
+  r.scores[winning] = (r.scores[winning] || 0) + points;
   r.result = { winning, points, gain: steps, places, tributers, switchBanker };
   r.message = r.trumpRules
-    ? `${winning === 'red' ? '红队' : '蓝队'} ${points} 分 / 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}`
-    : `${winning === 'red' ? '红队' : '蓝队'}获胜${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2`;
+    ? `${winning === 'red' ? '红队' : '蓝队'} +${points} 分（总分 ${r.scores[winning]}）/ 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}`
+    : `${winning === 'red' ? '红队' : '蓝队'} +${points} 分（总分 ${r.scores[winning]}）${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2`;
 
   if (tributers.length) applyAutoTribute(r, tributers, winning);
 }
@@ -754,6 +757,7 @@ function state(r, id) {
     trumpRules: !!r.trumpRules,
     trump: r.trump,
     levels: r.levels,
+    scores: r.scores || { red: 0, blue: 0 },
     banker: r.banker,
     bankerSeat: r.bankerSeat,
     turn: r.turn,
