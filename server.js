@@ -1,36 +1,133 @@
-const http=require('http'),fs=require('fs'),path=require('path'),crypto=require('crypto');
-const PORT=process.env.PORT||3000,rooms=new Map(),streams=new Map(),pub=path.join(__dirname,'public');
-const ranks=['3','4','5','6','7','8','9','10','J','Q','K','A','2','小怪','大怪'],gradeRanks=['2','3','4','5','6','7','8','9','10','J','Q','K','A'],suits=['♠','♥','♣','♦'],botNames=['小虎机','阿福','路子王','小囡','老克勒'];
-const uid=()=>crypto.randomBytes(7).toString('hex'),code=()=>crypto.randomBytes(3).toString('hex').toUpperCase(),teamOf=i=>i%2?'blue':'red';
-function deck(){let a=[];for(let n=0;n<3;n++){for(const s of suits)for(const r of ranks.slice(0,13))a.push({id:uid(),r,s});a.push({id:uid(),r:'小怪',s:'★'});a.push({id:uid(),r:'大怪',s:'★'});}return a.sort(()=>Math.random()-.5)}
-function rankValue(r,trump){if(r==='大怪')return 30;if(r==='小怪')return 29;const face=ranks.indexOf(r),lead=ranks.indexOf(trump);return (face-lead-1+26)%13}
-// Higher cards are presented first: big joker, small joker, trump, A ... 3.
-function sort(hand,trump){return hand.sort((a,b)=>rankValue(b.r,trump)-rankValue(a.r,trump)||a.s.localeCompare(b.s))}
-function newRoom(){let c=code();while(rooms.has(c))c=code();return {code:c,players:[],host:null,started:false,trump:'2',levels:{red:'2',blue:'2'},banker:'red',turn:0,table:null,passes:0,ranking:[],result:null,message:'等待牌友入座'} }
-function addPlayer(r,name,bot=false){if(r.players.length>=6)throw Error('牌桌已满（6 人）');let p={id:uid(),name:(name||'牌友').trim().slice(0,12),hand:[],bot};r.players.push(p);if(!r.host&&!bot)r.host=p.id;r.message=`${p.name}${bot?'（AI）':''} 入座（${r.players.length}/6）`;return p}
-function addBots(r){let n=0;while(r.players.length<6){let name=botNames[n++%botNames.length];while(r.players.some(p=>p.name===name))name+=Math.ceil(Math.random()*9);addPlayer(r,name,true)}}
-function group(cards,trump){let normal=cards.filter(c=>c.s!=='★'),wild=cards.filter(c=>c.s==='★');if(normal.length&&new Set(normal.map(c=>c.r)).size>1)return null;let r=normal[0]?.r;if(!r){r=wild.every(c=>c.r==='大怪')?'大怪':'小怪'}if(r==='大怪'&&wild.some(c=>c.r==='小怪'))return null;return {rank:rankValue(r,trump),face:r}}
-function combo(cards,trump){let n=cards.length;if(![1,2,3,5].includes(n))return null;if(n<5){let g=group(cards,trump);return g&&{kind:n,rank:g.rank,label:['','单张','对子','三张'][n]}}
- // Five-road evaluation. Jokers are wild for matching-rank patterns; suit/straight use natural cards only.
- let normal=cards.filter(c=>c.s!=='★'), wild=cards.length-normal.length, counts={};normal.forEach(c=>counts[c.r]=(counts[c.r]||0)+1);let entries=Object.entries(counts).sort((a,b)=>b[1]-a[1]);
- if(entries.length<=1){let g=group(cards,trump);if(g)return {kind:50,rank:g.rank,label:'五根'}}
- if(entries[0]&&entries[0][1]+wild>=4){return {kind:30,rank:rankValue(entries[0][0],trump),label:'四带一'}}
- if(entries.length<=2&&entries[0]&&entries[0][1]+wild>=3){return {kind:20,rank:rankValue(entries[0][0],trump),label:'葫芦'}}
- if(!wild){let os=normal.map(c=>rankValue(c.r,trump)).sort((a,b)=>a-b),flush=normal.every(c=>c.s===normal[0].s),straight=new Set(os).size===5&&os[4]-os[0]===4&&os[4]<29;if(flush&&straight)return {kind:40,rank:os[4],label:'同花顺'};if(flush)return {kind:10,rank:os[4],label:'同花'};if(straight)return {kind:5,rank:os[4],label:'顺子'}}
- return null}
-function beats(c,t){if(!t)return true;if(c.kind<=3||t.kind<=3)return c.kind===t.kind&&c.rank>t.rank;if(c.kind===5)return t.kind===5&&c.rank>t.rank;if(t.kind===5)return true;return c.kind===t.kind&&c.rank>t.rank}
-function activeCount(r){return r.players.filter(p=>!r.ranking.includes(p.id)).length}function next(r){for(let n=1;n<=6;n++){let i=(r.turn+n)%6;if(!r.ranking.includes(r.players[i].id)){r.turn=i;return}}}
-function finish(r,winning){let losing=activeCount(r),gain=Math.max(0,losing-(r.banker===winning?0:1)),before=gradeRanks.indexOf(r.levels[winning]);r.levels[winning]=gradeRanks[Math.min(gradeRanks.length-1,before+gain)];r.trump=r.levels[winning];r.banker=winning;r.started=false;r.result={winning,gain,losing};r.message=`${winning==='red'?'红队':'蓝队'}获胜，对方剩 ${losing} 人：${gain?`升级 ${gain} 级`:'本轮不升级'}`}
-function start(r){if(r.started)throw Error('牌局已经开始');addBots(r);let d=deck();r.players.forEach((p,i)=>p.hand=sort(d.slice(i*27,i*27+27),r.trump));r.started=true;r.turn=0;r.table=null;r.passes=0;r.ranking=[];r.result=null;r.message=`${r.players[0].name} 先出牌；将牌：${r.trump}`}
-function state(r,id){return {type:'state',code:r.code,started:r.started,host:r.host,trump:r.trump,levels:r.levels,banker:r.banker,turn:r.turn,passes:r.passes,ranking:r.ranking,result:r.result,message:r.message,table:r.table&&{player:r.table.player,combo:r.table.combo,cards:r.table.cards.map(c=>({r:c.r,s:c.s}))},players:r.players.map((p,i)=>({id:p.id,name:p.name,seat:i,team:teamOf(i),count:p.hand.length,bot:p.bot,done:r.ranking.includes(p.id)})),hand:r.players.find(p=>p.id===id)?.hand||[]}}
-function push(r){r.players.forEach(p=>{let s=streams.get(p.id);if(s)s.write(`data: ${JSON.stringify(state(r,p.id))}\n\n`)})}
-function play(r,p,ids){if(!r.started)throw Error('牌局尚未开始');if(r.players[r.turn].id!==p.id)throw Error('还没轮到你');let cards=ids.map(id=>p.hand.find(c=>c.id===id));if(cards.some(c=>!c))throw Error('选牌已失效');let c=combo(cards,r.trump);if(!c)throw Error('只可出合法单张、对子、三张或五路');if(!beats(c,r.table?.combo))throw Error('这手牌压不住桌面');p.hand=p.hand.filter(c=>!ids.includes(c.id));r.table={player:p.id,cards,combo:c};r.passes=0;r.message=`${p.name}${p.bot?'（AI）':''} 出了 ${c.label}`;if(!p.hand.length){r.ranking.push(p.id);let win=teamOf(r.players.indexOf(p));if(r.players.filter((x,i)=>teamOf(i)===win).every(x=>r.ranking.includes(x.id))){finish(r,win);return}r.message=`${p.name} 已出完牌！`}next(r)}
-function pass(r,p){if(!r.started||r.players[r.turn].id!==p.id)throw Error('还没轮到你');if(!r.table)throw Error('首出不能过');r.passes++;r.message=`${p.name}${p.bot?'（AI）':''} 不出`;if(r.passes>=activeCount(r)-1){let lead=r.table.player;r.table=null;r.passes=0;r.turn=r.players.findIndex(p=>p.id===lead);if(r.ranking.includes(lead))next(r);r.message=`无人再压，${r.players[r.turn].name} 获得出牌权`}else next(r)}
-function candidates(hand,trump,table){let out=[];for(const c of hand)out.push([c]);let by={};hand.forEach(c=>{let k=c.s==='★'?'wild':c.r;(by[k]??=[]).push(c)});for(const list of Object.values(by)){if(list.length>=2)for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++)out.push([list[i],list[j]]);if(list.length>=3)for(let i=0;i<list.length;i++)for(let j=i+1;j<list.length;j++)for(let k=j+1;k<list.length;k++)out.push([list[i],list[j],list[k]])}
- // The combinations are bounded: choosing five of a 27-card hand is safe for a casual six-player room.
- if(!table||table.kind>=5)for(let a=0;a<hand.length;a++)for(let b=a+1;b<hand.length;b++)for(let c=b+1;c<hand.length;c++)for(let d=c+1;d<hand.length;d++)for(let e=d+1;e<hand.length;e++)out.push([hand[a],hand[b],hand[c],hand[d],hand[e]]);
- return out.map(cards=>({cards,c:combo(cards,trump)})).filter(x=>x.c&&beats(x.c,table)).sort((a,b)=>a.c.kind-b.c.kind||a.c.rank-b.c.rank||a.cards.length-b.cards.length)}
-function botMove(r,p){let options=candidates(p.hand,r.trump,r.table?.combo);if(options.length)play(r,p,options[0].cards.map(c=>c.id));else pass(r,p);push(r)}
-setInterval(()=>{for(const r of rooms.values())if(r.started){let p=r.players[r.turn];if(p?.bot)setTimeout(()=>{if(r.started&&r.players[r.turn]?.id===p.id)botMove(r,p)},650)}},900);
-function json(res,status,x){res.writeHead(status,{'Content-Type':'application/json; charset=utf-8'});res.end(JSON.stringify(x))}function body(req){return new Promise(ok=>{let s='';req.on('data',c=>s+=c);req.on('end',()=>{try{ok(JSON.parse(s||'{}'))}catch{ok({})}})})}const mime={'.html':'text/html','.css':'text/css','.js':'application/javascript'};
-http.createServer(async(req,res)=>{let u=new URL(req.url,`http://${req.headers.host}`),b,r,p;try{if(req.method==='POST'&&u.pathname==='/api/create'){b=await body(req);r=newRoom();p=addPlayer(r,b.name);rooms.set(r.code,r);return json(res,200,{code:r.code,id:p.id})}if(req.method==='POST'&&u.pathname==='/api/join'){b=await body(req);r=rooms.get((b.code||'').toUpperCase());if(!r)throw Error('找不到该房间');if(r.started)throw Error('牌局已经开始，请等待下一局');p=addPlayer(r,b.name);push(r);return json(res,200,{code:r.code,id:p.id})}if(req.method==='POST'&&u.pathname==='/api/start'){b=await body(req);r=rooms.get(b.code);p=r?.players.find(x=>x.id===b.id);if(!p)throw Error('连接已失效');if(p.id!==r.host)throw Error('只有房主可以开始');start(r);push(r);return json(res,200,{ok:true})}if(req.method==='POST'&&['/api/play','/api/pass'].includes(u.pathname)){b=await body(req);r=rooms.get(b.code);p=r?.players.find(x=>x.id===b.id);if(!p)throw Error('连接已失效');u.pathname==='/api/play'?play(r,p,b.cards||[]):pass(r,p);push(r);return json(res,200,{ok:true})}if(req.method==='GET'&&u.pathname==='/api/stream'){r=rooms.get(u.searchParams.get('code'));p=r?.players.find(x=>x.id===u.searchParams.get('id'));if(!p){res.writeHead(404);return res.end()}res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-cache','Connection':'keep-alive'});streams.set(p.id,res);res.write(`data: ${JSON.stringify(state(r,p.id))}\n\n`);req.on('close',()=>streams.delete(p.id));return}let file=path.join(pub,u.pathname==='/'?'index.html':u.pathname.replace(/^\/+/,''));if(!file.startsWith(pub)||!fs.existsSync(file)){res.writeHead(404);return res.end('Not found')}res.writeHead(200,{'Content-Type':(mime[path.extname(file)]||'text/plain')+'; charset=utf-8'});fs.createReadStream(file).pipe(res)}catch(e){json(res,400,{error:e.message||'请求失败'})}}).listen(PORT,()=>console.log(`大怪路子：http://localhost:${PORT}`));
+'use strict';
+const http = require('http');
+const fs = require('fs');
+const path = require('path');
+const {
+  newRoom,
+  addPlayer,
+  start,
+  play,
+  pass,
+  botMove,
+  state,
+} = require('./logic');
+
+const PORT = process.env.PORT || 3000;
+const rooms = new Map();
+const streams = new Map();
+const pub = path.join(__dirname, 'public');
+
+function push(r) {
+  r.players.forEach((p) => {
+    const s = streams.get(p.id);
+    if (s) s.write(`data: ${JSON.stringify(state(r, p.id))}\n\n`);
+  });
+}
+
+setInterval(() => {
+  for (const r of rooms.values()) {
+    if (!r.started) continue;
+    const p = r.players[r.turn];
+    if (p?.bot) {
+      setTimeout(() => {
+        if (r.started && r.players[r.turn]?.id === p.id) {
+          botMove(r, p);
+          push(r);
+        }
+      }, 650);
+    }
+  }
+}, 900);
+
+function json(res, status, x) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  res.end(JSON.stringify(x));
+}
+
+function body(req) {
+  return new Promise((ok) => {
+    let s = '';
+    req.on('data', (c) => (s += c));
+    req.on('end', () => {
+      try {
+        ok(JSON.parse(s || '{}'));
+      } catch {
+        ok({});
+      }
+    });
+  });
+}
+
+const mime = { '.html': 'text/html', '.css': 'text/css', '.js': 'application/javascript', '.md': 'text/markdown' };
+
+http
+  .createServer(async (req, res) => {
+    const u = new URL(req.url, `http://${req.headers.host}`);
+    let b, r, p;
+    try {
+      if (req.method === 'POST' && u.pathname === '/api/create') {
+        b = await body(req);
+        r = newRoom();
+        while (rooms.has(r.code)) r = newRoom();
+        p = addPlayer(r, b.name);
+        rooms.set(r.code, r);
+        return json(res, 200, { code: r.code, id: p.id });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/join') {
+        b = await body(req);
+        r = rooms.get((b.code || '').toUpperCase());
+        if (!r) throw Error('找不到该房间');
+        if (r.started) throw Error('牌局已经开始，请等待下一局');
+        p = addPlayer(r, b.name);
+        push(r);
+        return json(res, 200, { code: r.code, id: p.id });
+      }
+      if (req.method === 'POST' && u.pathname === '/api/start') {
+        b = await body(req);
+        r = rooms.get(b.code);
+        p = r?.players.find((x) => x.id === b.id);
+        if (!p) throw Error('连接已失效');
+        if (p.id !== r.host) throw Error('只有房主可以开始');
+        start(r);
+        push(r);
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'POST' && ['/api/play', '/api/pass'].includes(u.pathname)) {
+        b = await body(req);
+        r = rooms.get(b.code);
+        p = r?.players.find((x) => x.id === b.id);
+        if (!p) throw Error('连接已失效');
+        if (u.pathname === '/api/play') play(r, p, b.cards || []);
+        else pass(r, p);
+        push(r);
+        return json(res, 200, { ok: true });
+      }
+      if (req.method === 'GET' && u.pathname === '/api/stream') {
+        r = rooms.get(u.searchParams.get('code'));
+        p = r?.players.find((x) => x.id === u.searchParams.get('id'));
+        if (!p) {
+          res.writeHead(404);
+          return res.end();
+        }
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          Connection: 'keep-alive',
+        });
+        streams.set(p.id, res);
+        res.write(`data: ${JSON.stringify(state(r, p.id))}\n\n`);
+        req.on('close', () => streams.delete(p.id));
+        return;
+      }
+      const file = path.join(pub, u.pathname === '/' ? 'index.html' : u.pathname.replace(/^\/+/, ''));
+      if (!file.startsWith(pub) || !fs.existsSync(file)) {
+        res.writeHead(404);
+        return res.end('Not found');
+      }
+      res.writeHead(200, { 'Content-Type': (mime[path.extname(file)] || 'text/plain') + '; charset=utf-8' });
+      fs.createReadStream(file).pipe(res);
+    } catch (e) {
+      json(res, 400, { error: e.message || '请求失败' });
+    }
+  })
+  .listen(PORT, () => console.log(`大怪路子：http://localhost:${PORT}`));
