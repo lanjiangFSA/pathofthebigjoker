@@ -1,6 +1,6 @@
 {
   "name": "big-monster-road",
-  "version": "1.0.0",
+  "version": "0.3.0",
   "private": true,
   "description": "大怪路子 - browser co-op monster survival game",
   "scripts": {
