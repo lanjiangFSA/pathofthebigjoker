@@ -6,10 +6,9 @@
 
 ## 快速启动
 
-需要 Node.js 18 或更新版本。
+需要 Node.js 18 或更新版本。在项目根目录执行：
 
-```powershell
-cd D:\P0712\4
+```bash
 node server.js
 ```
 
