@@ -254,12 +254,14 @@ function beats(challenger, table) {
   return false;
 }
 
-function newRoom() {
+function newRoom(opts = {}) {
+  const trumpRules = !!opts.trumpRules;
   return {
     code: code(),
     players: [],
     host: null,
     started: false,
+    trumpRules,
     trump: '2',
     levels: { red: '2', blue: '2' },
     banker: 'red',
@@ -270,7 +272,7 @@ function newRoom() {
     passes: 0,
     ranking: [],
     result: null,
-    message: '等待牌友入座',
+    message: trumpRules ? '等待牌友入座（将牌升级已开）' : '等待牌友入座（将牌固定为 2）',
     round: 0,
   };
 }
@@ -504,9 +506,11 @@ function settle(r) {
     }
   }
 
-  const steps = pointsToSteps(points);
-  const before = gradeRanks.indexOf(r.levels[winning]);
-  r.levels[winning] = gradeRanks[Math.min(gradeRanks.length - 1, before + steps)];
+  const steps = r.trumpRules ? pointsToSteps(points) : 0;
+  if (r.trumpRules) {
+    const before = gradeRanks.indexOf(r.levels[winning]);
+    r.levels[winning] = gradeRanks[Math.min(gradeRanks.length - 1, before + steps)];
+  }
 
   const oldBankerSeat = r.bankerSeat;
   if (switchBanker) {
@@ -514,17 +518,18 @@ function settle(r) {
     r.banker = teamOf(r.bankerSeat);
   } else {
     r.banker = banker;
-    // keep bankerSeat on same team — prefer seat that still on banker team
     if (teamOf(r.bankerSeat) !== r.banker) {
       r.bankerSeat = r.players.findIndex((_, i) => teamOf(i) === r.banker);
     }
   }
 
-  r.trump = r.levels[r.banker];
+  r.trump = r.trumpRules ? r.levels[r.banker] : '2';
   r.leadSeat = order[0].seat;
   r.started = false;
   r.result = { winning, points, gain: steps, places, tributers, switchBanker };
-  r.message = `${winning === 'red' ? '红队' : '蓝队'} ${points} 分 / 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}`;
+  r.message = r.trumpRules
+    ? `${winning === 'red' ? '红队' : '蓝队'} ${points} 分 / 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}`
+    : `${winning === 'red' ? '红队' : '蓝队'}获胜${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2`;
 
   if (tributers.length) applyAutoTribute(r, tributers, winning);
 }
@@ -573,8 +578,10 @@ function start(r) {
   if (r.round === 1) {
     r.bankerSeat = Math.floor(Math.random() * 6);
     r.banker = teamOf(r.bankerSeat);
-    r.trump = r.levels[r.banker];
+    r.trump = r.trumpRules ? r.levels[r.banker] : '2';
     r.leadSeat = r.bankerSeat;
+  } else if (!r.trumpRules) {
+    r.trump = '2';
   }
   const d = deck();
   r.players.forEach((p, i) => {
@@ -744,6 +751,7 @@ function state(r, id) {
     code: r.code,
     started: r.started,
     host: r.host,
+    trumpRules: !!r.trumpRules,
     trump: r.trump,
     levels: r.levels,
     banker: r.banker,

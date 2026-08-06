@@ -67,8 +67,8 @@ http
     try {
       if (req.method === 'POST' && u.pathname === '/api/create') {
         b = await body(req);
-        r = newRoom();
-        while (rooms.has(r.code)) r = newRoom();
+        r = newRoom({ trumpRules: !!b.trumpRules });
+        while (rooms.has(r.code)) r = newRoom({ trumpRules: !!b.trumpRules });
         p = addPlayer(r, b.name);
         rooms.set(r.code, r);
         return json(res, 200, { code: r.code, id: p.id });
