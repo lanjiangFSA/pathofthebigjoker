@@ -17,12 +17,38 @@ async function api(url, data) {
   return x;
 }
 
+/** Real visible height + measured chrome (H5 visualViewport pattern). */
+function syncAppShell() {
+  const h = Math.round(window.visualViewport?.height || window.innerHeight || 0);
+  if (h > 0) document.documentElement.style.setProperty('--app-height', `${h}px`);
+  const dock = document.getElementById('dock');
+  const top = document.querySelector('#table .topbar');
+  if (top) document.documentElement.style.setProperty('--topbar-h', `${top.offsetHeight}px`);
+  if (dock) document.documentElement.style.setProperty('--dock-h', `${dock.offsetHeight}px`);
+}
+
+function relayoutHand() {
+  if (!state) return;
+  HandSelect.layout($('#hand'), {
+    hand: state.hand || [],
+    trump: state.trump,
+    chosen,
+  });
+  syncActionButtons();
+}
+
 function enter(x) {
   me = x.id;
   room = x.code;
   $('#lobby').hidden = true;
   $('#table').hidden = false;
   $('#room').textContent = room;
+  document.body.classList.add('in-game');
+  syncAppShell();
+  requestAnimationFrame(() => {
+    syncAppShell();
+    relayoutHand();
+  });
   new EventSource(`/api/stream?code=${room}&id=${me}`).onmessage = (e) => {
     const next = JSON.parse(e.data);
     const ids = new Set((next.hand || []).map((c) => c.id));
@@ -195,6 +221,8 @@ function render() {
   });
   syncActionButtons();
   updateTimer();
+  syncAppShell();
+  requestAnimationFrame(syncAppShell);
 }
 
 HandSelect.bind($('#hand'), {
@@ -205,15 +233,18 @@ HandSelect.bind($('#hand'), {
   onChange: syncActionButtons,
 });
 
-window.addEventListener('resize', () => {
-  if (!state) return;
-  HandSelect.layout($('#hand'), {
-    hand: state.hand || [],
-    trump: state.trump,
-    chosen,
-  });
-  syncActionButtons();
-});
+function onShellResize() {
+  syncAppShell();
+  relayoutHand();
+}
+
+window.addEventListener('resize', onShellResize);
+window.addEventListener('orientationchange', () => setTimeout(onShellResize, 120));
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', onShellResize);
+  window.visualViewport.addEventListener('scroll', syncAppShell);
+}
+syncAppShell();
 
 if (timerTick) clearInterval(timerTick);
 timerTick = setInterval(updateTimer, 200);
