@@ -16,6 +16,7 @@ const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 const streams = new Map();
 const pub = path.join(__dirname, 'public');
+const botBusy = new Set(); // room codes currently running a bot tick
 
 function push(r) {
   r.players.forEach((p) => {
@@ -24,20 +25,29 @@ function push(r) {
   });
 }
 
-setInterval(() => {
-  for (const r of rooms.values()) {
-    if (!r.started) continue;
-    const p = r.players[r.turn];
-    if (p?.bot) {
-      setTimeout(() => {
-        if (r.started && r.players[r.turn]?.id === p.id) {
-          botMove(r, p);
-          push(r);
-        }
-      }, 650);
+function scheduleBot(r) {
+  if (!r.started || botBusy.has(r.code)) return;
+  const p = r.players[r.turn];
+  if (!p?.bot) return;
+  botBusy.add(r.code);
+  const delay = 1800 + Math.floor(Math.random() * 700);
+  setTimeout(() => {
+    try {
+      if (r.started && r.players[r.turn]?.id === p.id) {
+        botMove(r, p);
+        push(r);
+      }
+    } catch (e) {
+      console.error('botMove', r.code, e.message);
+    } finally {
+      botBusy.delete(r.code);
     }
-  }
-}, 900);
+  }, delay);
+}
+
+setInterval(() => {
+  for (const r of rooms.values()) scheduleBot(r);
+}, 400);
 
 function json(res, status, x) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
