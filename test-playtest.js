@@ -141,6 +141,9 @@ function assert(cond, msg) {
         assert(text.includes('rank-col'), 'rank-col css');
         assert(text.includes('turn-timer'), 'timer css');
         assert(!text.includes('col-selected'), 'no whole-column force select');
+        assert(text.includes('100dvh') || text.includes('100dvh'), 'mobile dvh viewport');
+        assert(text.includes('max-height:480px') || text.includes('max-height: 480px'), 'short-screen layout');
+        assert(text.includes('flex:1 1 0') || text.includes('flex: 1 1 0'), 'arena flex shrink');
       }
     }
     console.log('OK assets and UI markers');

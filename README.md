@@ -1,6 +1,6 @@
 # 大怪路子 Web 版
 
-> 当前版本：**v0.5.1**
+> 当前版本：**v0.5.2**
 
 一个无需安装的浏览器联机大怪路子牌桌。房主创建房间并分享六码房间号；人数不足六人时，空位会由 AI 自动补齐。
 
@@ -31,6 +31,11 @@ node server.js
 规则对齐 `Skills/howtoplay.md`；AI 配合对齐 `Skills/howtocollabrate.md`。
 
 ## 最近更新
+
+### v0.5.2
+
+- 手机端全屏弹性布局：桌面可收缩，手牌与出牌按钮始终可见，避免竖屏/横屏裁切。
+- 短屏（横屏手机）压缩座位与中央区，隐藏次要文案；窄屏隐藏页脚说明。
 
 ### v0.5.1
 
@@ -94,4 +99,4 @@ git log --oneline
 git status
 ```
 
-提交信息遵循 Conventional Commits 风格，例如 `feat(game): ...`、`fix(game): ...`、`docs: ...`。发布使用 Git 标签（如 `v0.5.1`）与 GitHub Release。
+提交信息遵循 Conventional Commits 风格，例如 `feat(game): ...`、`fix(game): ...`、`docs: ...`。发布使用 Git 标签（如 `v0.5.2`）与 GitHub Release。
