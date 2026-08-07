@@ -120,7 +120,6 @@ function renderSeats() {
       p.bot ? 'AI' : null,
       p.id === me ? '你' : null,
       p.teammate ? '队友' : null,
-      p.role === 'main' && state.started ? '主攻' : null,
     ]
       .filter(Boolean)
       .join(' · ');

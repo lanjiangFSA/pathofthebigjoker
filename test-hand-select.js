@@ -15,11 +15,16 @@ vm.runInNewContext(src, sandbox);
 const HS = sandbox.HandSelect;
 assert.ok(HS, 'HandSelect exported');
 assert.ok(HS.PEEK >= 28, `PEEK must show rank+suit, got ${HS.PEEK}`);
+assert.ok(String(src).includes('card-top'), 'horizontal card-top');
+assert.ok(String(src).includes('joker-big') && String(src).includes('joker-small'), 'joker styles');
+assert.ok(String(src).includes('style.top'), 'stack by top so header peeks');
+assert.ok(!String(src).includes("bottom = `${i * PEEK}`"), 'must not cover tops via bottom stack');
 assert.strictEqual(typeof HS.layout, 'function');
 assert.strictEqual(typeof HS.bind, 'function');
-assert.strictEqual(typeof HS.paint, 'function');
-assert.ok(String(src).includes('handcard'), 'hits handcard');
-assert.ok(!/toggleColumn|applyCol/.test(src) || src.includes('toggleMany'), 'per-card selection');
+assert.ok(String(src).includes('cardAtInColumn') || String(src).includes('applyColumnSpan'), 'geometric column span select');
+assert.ok(String(src).includes('Math.floor(rel / PEEK)') || String(src).includes('rel / PEEK'), 'peek-index hit test');
+
+
 
 const m = HS.SelectionModel([]);
 m.toggle('a');
