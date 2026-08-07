@@ -489,14 +489,78 @@ function activeCount(r) {
   return r.players.filter((p) => !r.ranking.includes(p.id)).length;
 }
 
+const TURN_MS = 15000;
+
+function armTurn(r) {
+  if (!r.started) {
+    r.turnDeadline = null;
+    return;
+  }
+  r.turnDeadline = Date.now() + TURN_MS;
+}
+
 function next(r) {
   for (let n = 1; n <= 6; n++) {
     const i = (r.turn + n) % 6;
     if (!r.ranking.includes(r.players[i].id)) {
       r.turn = i;
+      armTurn(r);
       return;
     }
   }
+}
+
+function autoAct(r) {
+  if (!r.started) return false;
+  const p = r.players[r.turn];
+  if (!p || r.ranking.includes(p.id)) return false;
+  const tableCombo = r.table?.combo || null;
+  try {
+    if (!tableCombo) {
+      if (!p.hand.length) {
+        next(r);
+        return true;
+      }
+      const sorted = sort([...p.hand], r.trump);
+      const card = sorted[sorted.length - 1];
+      const label = `${p.name} 超时，自动出了单张`;
+      play(r, p, [card.id]);
+      if (r.started) r.message = label;
+      else if (!String(r.message || '').includes('超时')) r.message = `${label}。${r.message}`;
+      return true;
+    }
+    let options = [];
+    try {
+      options = candidates(p.hand, r.trump, tableCombo);
+    } catch {
+      options = [];
+    }
+    if (options.length) {
+      const label = `${p.name} 超时，自动出了牌`;
+      play(r, p, options[0].cards.map((c) => c.id));
+      if (r.started) r.message = `${p.name} 超时，自动出了 ${r.table?.combo?.label || '牌'}`;
+      else if (!String(r.message || '').includes('超时')) r.message = `${label}。${r.message}`;
+      return true;
+    }
+    pass(r, p);
+    if (r.started) r.message = `${p.name} 超时，自动不出`;
+    return true;
+  } catch (e) {
+    try {
+      if (tableCombo) pass(r, p);
+    } catch {
+      /* ignore */
+    }
+    return false;
+  }
+}
+
+function checkTimeout(r) {
+  if (!r.started || !r.turnDeadline) return false;
+  if (Date.now() < r.turnDeadline) return false;
+  const p = r.players[r.turn];
+  if (p?.bot) return false;
+  return autoAct(r);
 }
 
 function pointsToSteps(points) {
@@ -630,6 +694,7 @@ function settle(r) {
   r.leadSeat = order[0].seat;
   r.started = false;
   r.trickLog = [];
+  r.turnDeadline = null;
   if (!r.scores) r.scores = { red: 0, blue: 0 };
   r.scores[winning] = (r.scores[winning] || 0) + boardPoints;
   r.result = { winning, points: boardPoints, upgradePoints: points, gain: steps, places, tributers, switchBanker };
@@ -716,6 +781,7 @@ function start(r) {
   r.trickLog = [];
   r.ranking = [];
   r.result = null;
+  armTurn(r);
   r.message = `${r.players[r.turn].name} 先出（庄：${r.players[r.bankerSeat].name}）；将牌：${r.trump}`;
 }
 
@@ -770,6 +836,7 @@ function pass(r, p) {
     r.trickLog = [];
     r.turn = r.players.findIndex((x) => x.id === lead);
     if (r.ranking.includes(lead)) next(r);
+    else armTurn(r);
     r.message = `无人再压，${r.players[r.turn].name} 获得出牌权`;
   } else next(r);
 }
@@ -915,6 +982,8 @@ function state(r, id) {
     banker: r.banker,
     bankerSeat: r.bankerSeat,
     turn: r.turn,
+    turnDeadline: r.turnDeadline || null,
+    turnMs: TURN_MS,
     passes: r.passes,
     ranking: r.ranking,
     result: r.result,
@@ -974,4 +1043,8 @@ module.exports = {
   findStraightWindow,
   pointsToSteps,
   scoreFromPlaces,
+  TURN_MS,
+  armTurn,
+  autoAct,
+  checkTimeout,
 };

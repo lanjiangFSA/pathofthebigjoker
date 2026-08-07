@@ -10,13 +10,14 @@ const {
   pass,
   botMove,
   state,
+  checkTimeout,
 } = require('./logic');
 
 const PORT = process.env.PORT || 3000;
 const rooms = new Map();
 const streams = new Map();
 const pub = path.join(__dirname, 'public');
-const botBusy = new Set(); // room codes currently running a bot tick
+const botBusy = new Set();
 
 function push(r) {
   r.players.forEach((p) => {
@@ -46,8 +47,11 @@ function scheduleBot(r) {
 }
 
 setInterval(() => {
-  for (const r of rooms.values()) scheduleBot(r);
-}, 400);
+  for (const r of rooms.values()) {
+    if (checkTimeout(r)) push(r);
+    else scheduleBot(r);
+  }
+}, 250);
 
 function json(res, status, x) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
