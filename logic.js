@@ -276,6 +276,8 @@ function newRoom(opts = {}) {
     result: null,
     message: trumpRules ? '等待牌友入座（将牌升级已开）' : '等待牌友入座（将牌固定为 2）',
     round: 0,
+    turnDeadline: null,
+    firstLeadDone: false,
   };
 }
 
@@ -489,14 +491,74 @@ function activeCount(r) {
   return r.players.filter((p) => !r.ranking.includes(p.id)).length;
 }
 
-const TURN_MS = 15000;
+/** First lead of a round (read hand). Later turns use TURN_MS. */
+const TURN_MS_FIRST = 45000;
+const TURN_MS = 25000;
+
+function turnWindowMs(r) {
+  return r.firstLeadDone ? TURN_MS : TURN_MS_FIRST;
+}
+
+function isJokerRank(r) {
+  return r === '大怪' || r === '小怪';
+}
+
+/** Unbeatable joker shapes from issue.log — skip pass circle. */
+function isSureWinCards(cards) {
+  if (!cards?.length || ![1, 2, 3].includes(cards.length)) return false;
+  if (!cards.every((c) => isJokerRank(c.r))) return false;
+  const big = cards.filter((c) => c.r === '大怪').length;
+  const small = cards.filter((c) => c.r === '小怪').length;
+  if (cards.length === 1 && big === 1) return true;
+  if (cards.length === 2 && big === 2) return true;
+  if (cards.length === 3 && big === 3) return true;
+  if (cards.length === 3 && big === 1 && small === 2) return true;
+  if (cards.length === 3 && big === 2 && small === 1) return true;
+  return false;
+}
+
+function teamCleared(r) {
+  let red = 0;
+  let blue = 0;
+  r.ranking.forEach((id) => {
+    const seat = r.players.findIndex((p) => p.id === id);
+    if (seat < 0) return;
+    if (teamOf(seat) === 'red') red++;
+    else blue++;
+  });
+  return red >= 3 || blue >= 3;
+}
+
+function shouldSettle(r) {
+  return teamCleared(r) || r.ranking.length >= 5;
+}
 
 function armTurn(r) {
   if (!r.started) {
     r.turnDeadline = null;
     return;
   }
-  r.turnDeadline = Date.now() + TURN_MS;
+  r.turnDeadline = Date.now() + turnWindowMs(r);
+  tryForcedPass(r);
+}
+
+/** Followers with fewer cards than the table length auto-pass. */
+function tryForcedPass(r) {
+  if (!r.started || !r.table || r._forcingPass) return;
+  r._forcingPass = true;
+  try {
+    let guard = 0;
+    while (r.started && r.table && guard++ < 12) {
+      const p = r.players[r.turn];
+      if (!p || r.ranking.includes(p.id)) break;
+      if (p.hand.length >= r.table.cards.length) break;
+      const label = `${p.name} 牌不够，自动不出`;
+      pass(r, p);
+      if (r.started) r.message = label;
+    }
+  } finally {
+    r._forcingPass = false;
+  }
 }
 
 function next(r) {
@@ -508,6 +570,26 @@ function next(r) {
       return;
     }
   }
+}
+
+function resolveSureWinTrick(r) {
+  if (!r.started || !r.table || !isSureWinCards(r.table.cards)) return false;
+  const lead = r.table.player;
+  if (!r.trickLog) r.trickLog = [];
+  r.players.forEach((p) => {
+    if (p.id === lead || r.ranking.includes(p.id)) return;
+    r.trickLog.push({ playerId: p.id, name: p.name, pass: true, label: '不出', cards: [] });
+  });
+  r.table = null;
+  r.passes = 0;
+  r.trickLog = [];
+  r.turn = r.players.findIndex((x) => x.id === lead);
+  if (r.turn < 0 || r.ranking.includes(lead)) next(r);
+  else armTurn(r);
+  if (r.started) {
+    r.message = `天王牌，自动过；${r.players[r.turn].name} 获得出牌权`;
+  }
+  return true;
 }
 
 function autoAct(r) {
@@ -529,19 +611,7 @@ function autoAct(r) {
       else if (!String(r.message || '').includes('超时')) r.message = `${label}。${r.message}`;
       return true;
     }
-    let options = [];
-    try {
-      options = candidates(p.hand, r.trump, tableCombo);
-    } catch {
-      options = [];
-    }
-    if (options.length) {
-      const label = `${p.name} 超时，自动出了牌`;
-      play(r, p, options[0].cards.map((c) => c.id));
-      if (r.started) r.message = `${p.name} 超时，自动出了 ${r.table?.combo?.label || '牌'}`;
-      else if (!String(r.message || '').includes('超时')) r.message = `${label}。${r.message}`;
-      return true;
-    }
+    // Follow timeout: always pass (never auto-beat).
     pass(r, p);
     if (r.started) r.message = `${p.name} 超时，自动不出`;
     return true;
@@ -579,6 +649,7 @@ function settle(r) {
   while (r.ranking.length < 6) {
     const left = r.players.filter((p) => !r.ranking.includes(p.id));
     if (!left.length) break;
+    left.sort((a, b) => a.hand.length - b.hand.length);
     r.ranking.push(left[0].id);
   }
 
@@ -781,6 +852,7 @@ function start(r) {
   r.trickLog = [];
   r.ranking = [];
   r.result = null;
+  r.firstLeadDone = false;
   armTurn(r);
   r.message = `${r.players[r.turn].name} 先出（庄：${r.players[r.bankerSeat].name}）；将牌：${r.trump}`;
 }
@@ -811,13 +883,18 @@ function play(r, p, ids) {
     cards: cards.map((x) => ({ r: x.r, s: x.s })),
   });
   r.message = `${p.name}${p.bot ? '（AI）' : ''} 出了 ${c.label}`;
+  if (!r.firstLeadDone) r.firstLeadDone = true;
   if (!p.hand.length) {
     r.ranking.push(p.id);
     r.message = `${p.name} 已出完牌！（第 ${r.ranking.length} 名）`;
-    if (r.ranking.length >= 5) {
+    if (shouldSettle(r)) {
       settle(r);
       return;
     }
+  }
+  if (isSureWinCards(cards)) {
+    resolveSureWinTrick(r);
+    return;
   }
   next(r);
 }
@@ -983,7 +1060,8 @@ function state(r, id) {
     bankerSeat: r.bankerSeat,
     turn: r.turn,
     turnDeadline: r.turnDeadline || null,
-    turnMs: TURN_MS,
+    turnMs: turnWindowMs(r),
+    firstLeadDone: !!r.firstLeadDone,
     passes: r.passes,
     ranking: r.ranking,
     result: r.result,
@@ -1044,6 +1122,11 @@ module.exports = {
   pointsToSteps,
   scoreFromPlaces,
   TURN_MS,
+  TURN_MS_FIRST,
+  turnWindowMs,
+  isSureWinCards,
+  teamCleared,
+  shouldSettle,
   armTurn,
   autoAct,
   checkTimeout,
