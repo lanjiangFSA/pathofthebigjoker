@@ -17,26 +17,45 @@
       <input id="code" maxlength="6" placeholder="输入 6 位房间号">
       <button id="join">加入</button>
     </div>
-    <small>创建后将房间号发给朋友；空位会由 AI 补齐。将牌规则仅创建时可设置。</small>
+    <small>创建后将房间号发给朋友；空位会由 AI 补齐。将牌规则仅创建时可设置。建议横屏游玩。</small>
     <p id="error"></p>
   </section>
   <section id="table" hidden>
-    <header>
-      <div><span class="tag">房间</span><b id="room"></b><button id="copy">复制号码</button></div>
-      <div>将牌 <b id="trump">2</b>　<span id="trumpMode"></span>　<span id="status"></span></div>
+    <header class="topbar">
+      <div class="top-left">
+        <span class="tag">房间</span><b id="room"></b>
+        <button type="button" id="copy">复制</button>
+      </div>
+      <div class="top-mid">
+        将牌 <b id="trump">2</b>
+        <span id="trumpMode"></span>
+        <span id="status"></span>
+      </div>
+      <div class="top-scores">
+        <span class="redscore" id="redScoreWrap">红 <b id="redScore">0</b><small id="redLevel"></small></span>
+        <span class="sep">:</span>
+        <span class="bluescore" id="blueScoreWrap">蓝 <b id="blueScore">0</b><small id="blueLevel"></small></span>
+      </div>
     </header>
-    <div class="scoreboard">
-      <div class="redscore">红队 <b id="redScore">0</b><small id="redLevel"></small><small id="redBanker"></small></div>
-      <div id="scoreHint">本局结算：剩余对手人数决定升级；换庄少升一级</div>
-      <div class="bluescore">蓝队 <b id="blueScore">0</b><small id="blueLevel"></small><small id="blueBanker"></small></div>
-    </div>
-    <div class="seats" id="seats"></div>
-    <div class="board">
-      <div id="message"></div>
-      <div id="trickLog" class="trick-log"></div>
-      <div id="playedBy"></div>
-      <div id="played"></div>
-      <div id="turn"></div>
+    <div id="table-arena" class="table-arena">
+      <div class="felt"></div>
+      <div class="seat-slot" data-slot="topL"></div>
+      <div class="seat-slot" data-slot="topR"></div>
+      <div class="seat-slot" data-slot="leftU"></div>
+      <div class="seat-slot" data-slot="leftL"></div>
+      <div class="seat-slot" data-slot="rightU"></div>
+      <div class="seat-slot" data-slot="rightL"></div>
+      <div class="seat-slot" data-slot="bottom"></div>
+      <div class="arena-center">
+        <div id="turn-timer" class="turn-timer" hidden>
+          <div class="clock-face"><span id="timerSec">15</span></div>
+          <small id="timerWho"></small>
+        </div>
+        <div id="message"></div>
+        <div id="playedBy"></div>
+        <div id="played"></div>
+        <div id="trickLog" class="trick-log"></div>
+      </div>
       <div id="startbox">
         <button id="start">开始发牌</button>
         <p>不足 6 人时，空位将自动由 AI 补齐</p>
@@ -46,8 +65,8 @@
       <button id="pass">不要</button>
       <button id="play">出牌</button>
     </div>
-    <div id="hand"></div>
-    <footer>规则：单张、对子、三张、五路（杂顺／同花／三带两／四带一／同花顺／五同）；怪牌可补非单张组合。手牌可拖动多选。</footer>
+    <div id="hand" class="hand-cols"></div>
+    <footer>规则：单张、对子、三张、五路（杂顺／同花／三带两／四带一／同花顺／五同）。手牌按点数竖列，点列或拖选。</footer>
   </section>
 </main>
 <script src="game.js"></script>
