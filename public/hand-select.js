@@ -12,8 +12,12 @@
   const CARD_H = 64;
 
   const MIN_COL_W = 22;
+  /** Reference width for peek/cardH scale; mobile soft ceiling. */
   const MAX_COL_W = 40;
+  /** Wide / desktop ceiling so columns fill leftover space. */
+  const MAX_COL_W_WIDE = 56;
   const COL_GAP = 3;
+  const WIDE_AVAIL = 640;
 
   function layoutMetrics(handEl) {
     const cs = getComputedStyle(handEl);
@@ -22,11 +26,16 @@
     return { peek, cardH };
   }
 
+  function maxColWidth(availWidth) {
+    return availWidth >= WIDE_AVAIL ? MAX_COL_W_WIDE : MAX_COL_W;
+  }
+
   /** Fit rank columns into one screen: scale width, wrap to 2 rows if needed. */
   function fitColumns(rankCount, availWidth) {
     const n = Math.max(0, rankCount | 0);
     const avail = Math.max(0, availWidth | 0);
-    if (!n) return { rows: 1, colW: MAX_COL_W, perRow: 0 };
+    const maxW = maxColWidth(avail);
+    if (!n) return { rows: 1, colW: maxW, perRow: 0 };
 
     const widthFor = (count) => {
       const gaps = COL_GAP * Math.max(0, count - 1);
@@ -35,13 +44,13 @@
 
     let colW = widthFor(n);
     if (colW >= MIN_COL_W) {
-      return { rows: 1, colW: Math.min(MAX_COL_W, colW), perRow: n };
+      return { rows: 1, colW: Math.min(maxW, Math.max(MIN_COL_W, colW)), perRow: n };
     }
     const perRow = Math.ceil(n / 2);
     colW = widthFor(perRow);
     return {
       rows: 2,
-      colW: Math.max(MIN_COL_W, Math.min(MAX_COL_W, colW)),
+      colW: Math.max(MIN_COL_W, Math.min(maxW, colW)),
       perRow,
     };
   }
@@ -153,11 +162,17 @@
     const order = [...groups.keys()].sort((a, b) => rankScore(b, trump) - rankScore(a, trump));
     const base = layoutMetrics(handEl);
     const padX = 18;
-    const avail = Math.max(0, (handEl.clientWidth || handEl.offsetWidth || 320) - padX);
+    const rawW =
+      handEl.clientWidth ||
+      handEl.offsetWidth ||
+      handEl.parentElement?.clientWidth ||
+      320;
+    const avail = Math.max(0, rawW - padX);
     const fit = fitColumns(order.length, avail);
-    const scale = fit.colW / MAX_COL_W;
-    const peek = Math.max(12, Math.round(base.peek * Math.max(0.55, scale)));
-    const cardH = Math.max(32, Math.round(base.cardH * Math.max(0.55, scale)));
+    // Scale from mobile reference so wide cols grow; cap growth slightly.
+    const scale = Math.min(1.25, Math.max(0.55, fit.colW / MAX_COL_W));
+    const peek = Math.max(12, Math.round(base.peek * scale));
+    const cardH = Math.max(32, Math.round(base.cardH * scale));
     handEl.dataset.peek = String(peek);
     handEl.dataset.rows = String(fit.rows);
     handEl.classList.toggle('hand-rows-2', fit.rows === 2);
@@ -341,6 +356,7 @@
     CARD_H,
     MIN_COL_W,
     MAX_COL_W,
+    MAX_COL_W_WIDE,
     RANK_ORDER,
     SelectionModel,
     fitColumns,

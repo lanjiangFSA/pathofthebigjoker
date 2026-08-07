@@ -26,7 +26,10 @@ assert.ok(String(src).includes('Math.floor(rel / peek)') || String(src).includes
 assert.strictEqual(typeof HS.fitColumns, 'function', 'fitColumns export');
 assert.ok(HS.fitColumns(8, 320).rows === 1, '8 cols fit one row');
 assert.ok(HS.fitColumns(16, 200).rows === 2, 'many cols wrap to two rows');
+assert.ok(HS.fitColumns(16, 900).rows === 1, 'wide desktop stays one row');
+assert.ok(HS.fitColumns(16, 900).colW > 40, 'wide desktop grows columns past mobile max');
 assert.ok(String(src).includes('hand-rows-2'), 'two-row class toggle');
+assert.ok(String(src).includes('MAX_COL_W_WIDE'), 'wide max constant');
 
 
 
