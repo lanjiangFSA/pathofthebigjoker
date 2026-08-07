@@ -150,19 +150,24 @@ small{color:#9fb2ca}
 
 #hand.hand-cols{
   position:relative;display:flex;justify-content:center;align-items:flex-end;
-  gap:4px;min-height:120px;max-height:38vh;overflow-x:auto;overflow-y:hidden;
-  padding:10px 8px 14px;background:#12202c;touch-action:none;user-select:none;
+  gap:6px;min-height:140px;max-height:42vh;overflow-x:auto;overflow-y:hidden;
+  padding:14px 8px 18px;background:#12202c;touch-action:none;user-select:none;
 }
 .rank-col{
-  position:relative;flex:0 0 auto;width:46px;min-height:70px;cursor:pointer;
+  position:relative;flex:0 0 auto;width:46px;min-height:70px;
 }
 .rank-col .handcard{
-  position:absolute;left:0;cursor:pointer;transition:transform .08s, outline-color .08s;
+  position:absolute;left:0;bottom:0;cursor:pointer;
+  transition:transform .08s, outline-color .08s, box-shadow .08s;
 }
+.rank-col .handcard .rank,
+.rank-col .handcard .suit{pointer-events:none}
 .rank-col .handcard.selected{
-  outline:2px solid #f4c95d;outline-offset:-1px;transform:translateY(-8px);
+  outline:2px solid #f4c95d;outline-offset:-1px;
+  transform:translateY(-12px);
+  box-shadow:0 6px 14px #0008;
 }
-.rank-col.col-selected .handcard{outline:2px solid #f4c95d;outline-offset:-1px}
+/* Remove whole-column force-select styling */
 
 #startbox{
   position:absolute;inset:0;z-index:5;background:#0e1f2ce8;

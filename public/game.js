@@ -3,8 +3,6 @@ let timerTick = null;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
-const RANK_ORDER = ['大怪', '小怪', '2', 'A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3'];
-
 /** Relative seat 0=self → slot (clockwise from bottom). leftL unused. */
 const REL_SLOTS_6 = ['bottom', 'rightL', 'rightU', 'topR', 'topL', 'leftU'];
 
@@ -52,12 +50,7 @@ $('#join').onclick = () => enterRoom(true);
 $('#code').oninput = (e) => (e.target.value = e.target.value.toUpperCase());
 
 function card(c, cls = '') {
-  const d = document.createElement('div');
-  d.className = `card ${cls} ${c.s === '♥' || c.s === '♦' ? 'red' : ''} ${c.s === '★' ? 'joker' : ''}`;
-  d.dataset.id = c.id || '';
-  d.dataset.rank = c.r || '';
-  d.innerHTML = `<span>${c.r}</span><small>${c.s}</small>`;
-  return d;
+  return HandSelect.makeCardEl(c, cls);
 }
 
 function seatCountText(p) {
@@ -83,142 +76,10 @@ function passSetFromLog() {
   return set;
 }
 
-function paintSelection() {
-  $$('#hand .handcard').forEach((el) => {
-    el.classList.toggle('selected', chosen.includes(el.dataset.id));
-  });
-  $$('#hand .rank-col').forEach((col) => {
-    const ids = [...col.querySelectorAll('.handcard')].map((c) => c.dataset.id);
-    col.classList.toggle('col-selected', ids.length && ids.every((id) => chosen.includes(id)));
-  });
+function syncActionButtons() {
   const mine = state?.started && state.players[state.turn]?.id === me;
   $('#play').disabled = !mine || !chosen.length;
   $('#pass').disabled = !mine || !state?.table;
-}
-
-function toggleColumn(ids) {
-  const allOn = ids.every((id) => chosen.includes(id));
-  if (allOn) chosen = chosen.filter((id) => !ids.includes(id));
-  else {
-    ids.forEach((id) => {
-      if (!chosen.includes(id)) chosen.push(id);
-    });
-  }
-  paintSelection();
-}
-
-function layoutRankColumns(handEl) {
-  const groups = new Map();
-  (state.hand || []).forEach((c) => {
-    const k = c.r;
-    if (!groups.has(k)) groups.set(k, []);
-    groups.get(k).push(c);
-  });
-  const order = [...groups.keys()].sort((a, b) => {
-    const ia = RANK_ORDER.indexOf(a);
-    const ib = RANK_ORDER.indexOf(b);
-    const pa = ia < 0 ? 99 : ia;
-    const pb = ib < 0 ? 99 : ib;
-    if (state.trump && a === state.trump) return -1;
-    if (state.trump && b === state.trump) return 1;
-    return pa - pb;
-  });
-  // trump already first if matches; re-sort: jokers, trump, then high to low faces
-  order.sort((a, b) => {
-    const score = (r) => {
-      if (r === '大怪') return 1000;
-      if (r === '小怪') return 900;
-      if (r === state.trump) return 800;
-      const i = RANK_ORDER.indexOf(r);
-      return i < 0 ? 0 : 100 - i;
-    };
-    return score(b) - score(a);
-  });
-
-  handEl.innerHTML = '';
-  const peek = 16;
-  order.forEach((rank) => {
-    const cards = groups.get(rank);
-    const col = document.createElement('div');
-    col.className = 'rank-col';
-    col.dataset.rank = rank;
-    cards.forEach((c, i) => {
-      const d = card(c, 'handcard');
-      if (chosen.includes(c.id)) d.classList.add('selected');
-      d.style.bottom = `${i * peek}px`;
-      d.style.zIndex = String(i + 1);
-      col.append(d);
-    });
-    col.style.height = `${66 + (cards.length - 1) * peek}px`;
-    handEl.append(col);
-  });
-}
-
-function bindHandDrag(handEl) {
-  let dragging = false;
-  let moved = false;
-  let startCol = null;
-  let modeAdd = true;
-  const seen = new Set();
-
-  const colAt = (x, y) => {
-    const stack = document.elementsFromPoint(x, y);
-    const el = stack.find((n) => n.classList?.contains('rank-col'));
-    return el || null;
-  };
-
-  const applyCol = (col) => {
-    if (!col || seen.has(col)) return;
-    seen.add(col);
-    const ids = [...col.querySelectorAll('.handcard')].map((c) => c.dataset.id);
-    if (modeAdd) {
-      ids.forEach((id) => {
-        if (!chosen.includes(id)) chosen.push(id);
-      });
-    } else {
-      chosen = chosen.filter((id) => !ids.includes(id));
-    }
-    paintSelection();
-  };
-
-  handEl.onpointerdown = (e) => {
-    if (e.button != null && e.button !== 0) return;
-    const col = colAt(e.clientX, e.clientY);
-    if (!col) return;
-    dragging = true;
-    moved = false;
-    startCol = col;
-    const ids = [...col.querySelectorAll('.handcard')].map((c) => c.dataset.id);
-    modeAdd = !ids.every((id) => chosen.includes(id));
-    seen.clear();
-    handEl.setPointerCapture?.(e.pointerId);
-    e.preventDefault();
-  };
-
-  handEl.onpointermove = (e) => {
-    if (!dragging) return;
-    if (!moved) {
-      moved = true;
-      applyCol(startCol);
-    }
-    applyCol(colAt(e.clientX, e.clientY));
-  };
-
-  const end = (e) => {
-    if (!dragging) return;
-    dragging = false;
-    if (!moved && startCol) {
-      const ids = [...startCol.querySelectorAll('.handcard')].map((c) => c.dataset.id);
-      toggleColumn(ids);
-    } else if (moved) {
-      applyCol(colAt(e.clientX, e.clientY));
-    }
-    startCol = null;
-    seen.clear();
-  };
-
-  handEl.onpointerup = end;
-  handEl.onpointercancel = end;
 }
 
 function updateTimer() {
@@ -328,12 +189,22 @@ function render() {
     ? `上局已结束。红 ${scores.red} : ${scores.blue} 蓝`
     : '不足 6 人时，空位将自动由 AI 补齐';
 
-  layoutRankColumns($('#hand'));
-  paintSelection();
+  HandSelect.layout($('#hand'), {
+    hand: state.hand || [],
+    trump: state.trump,
+    chosen,
+  });
+  syncActionButtons();
   updateTimer();
 }
 
-bindHandDrag($('#hand'));
+HandSelect.bind($('#hand'), {
+  getChosen: () => chosen,
+  setChosen: (ids) => {
+    chosen = ids;
+  },
+  onChange: syncActionButtons,
+});
 
 if (timerTick) clearInterval(timerTick);
 timerTick = setInterval(updateTimer, 200);
