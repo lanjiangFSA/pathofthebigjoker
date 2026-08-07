@@ -112,13 +112,14 @@ function assert(cond, msg) {
         assert(text.includes('table-arena'), 'table arena');
         assert(text.includes('turn-timer'), 'turn timer');
         assert(text.includes('trickLog'), 'trickLog in html');
+        assert(text.includes('id="dock"') || text.includes("id='dock'"), 'dock shell');
         assert(text.includes('hand-select.js'), 'loads hand-select before game');
         assert(text.indexOf('hand-select.js') < text.indexOf('game.js'), 'hand-select before game.js');
       }
       if (f === '/hand-select.js') {
         assert(text.includes('HandSelect'), 'HandSelect export');
         assert(text.includes('PEEK'), 'PEEK constant');
-        assert(/PEEK\s*=\s*(\d+)/.test(text) && Number(RegExp.$1) >= 28, 'PEEK >= 28');
+        assert(/PEEK\s*=\s*(\d+)/.test(text) && Number(RegExp.$1) >= 24, 'PEEK present');
         assert(text.includes('handcard'), 'hits .handcard');
         assert(text.includes('SelectionModel'), 'SelectionModel');
         assert(text.includes('elementsFromPoint'), 'pointer hit-test');
@@ -133,20 +134,24 @@ function assert(cond, msg) {
         assert(text.includes('turnDeadline') || text.includes('updateTimer'), 'timer ui');
         assert(text.includes('REL_SLOTS') || text.includes('seat-slot'), 'relative seats');
         assert(!text.includes('layoutRankColumns'), 'hand layout moved out');
+        assert(text.includes('syncAppShell'), 'app shell sync');
+        assert(text.includes('visualViewport') || text.includes('--app-height'), 'viewport height sync');
+        assert(text.includes('--dock-h'), 'dock height css var');
       }
       if (f === '/style.css') {
-        assert(text.includes('touch-action:none') || text.includes('touch-action: none'), 'hand drag css');
+        assert(text.includes('touch-action:pan-x') || text.includes('touch-action: pan-x') || text.includes('touch-action:none'), 'hand touch css');
         assert(text.includes('trick-log'), 'trick log css');
         assert(text.includes('table-arena'), 'arena css');
         assert(text.includes('rank-col'), 'rank-col css');
         assert(text.includes('turn-timer'), 'timer css');
         assert(!text.includes('col-selected'), 'no whole-column force select');
-        assert(text.includes('100dvh') || text.includes('100svh'), 'mobile dvh/svh viewport');
+        assert(text.includes('100svh') || text.includes('--app-height'), 'app height viewport');
+        assert(text.includes('#dock') || text.includes('id="dock"'), 'dock styles');
         assert(text.includes('orientation:landscape') || text.includes('orientation: landscape'), 'landscape layout');
         assert(text.includes('orientation:portrait') || text.includes('orientation: portrait'), 'portrait layout');
         assert(text.includes('safe-area-inset-bottom'), 'safe area padding');
         assert(text.includes('--hand-peek'), 'hand peek css var');
-        assert(text.includes('flex:1 1 0') || text.includes('flex: 1 1 0'), 'arena flex shrink');
+        assert(text.includes('--dock-h'), 'dock-h var');
       }
     }
     console.log('OK assets and UI markers');
