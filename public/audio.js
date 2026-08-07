@@ -12,7 +12,8 @@ const GameAudio = (() => {
   };
   const SFX_URL = {
     play: BASE + 'sfx-play.mp3',
-    pass: BASE + 'sfx-pass.mp3',
+    passF: BASE + 'sfx-pass-f.mp3',
+    passM: BASE + 'sfx-pass-m.mp3',
     deal: BASE + 'sfx-deal.mp3',
     yourTurn: BASE + 'sfx-your-turn.mp3',
     timerWarn: BASE + 'sfx-timer-warn.mp3',
@@ -21,10 +22,11 @@ const GameAudio = (() => {
     seatJoin: BASE + 'sfx-seat-join.mp3',
     tension: BASE + 'sfx-tension.mp3',
   };
-  const SFX_BASE = { pass: 0.9, yourTurn: 0.45, default: 0.7 };
+  const SFX_BASE = { passF: 0.9, passM: 0.9, yourTurn: 0.45, default: 0.7 };
 
-  const MUSIC_KEY = 'dglz-vol-music';
-  const SFX_KEY = 'dglz-vol-sfx';
+  // v0.5.5 keys so prior localStorage defaults are replaced
+  const MUSIC_KEY = 'dglz-v055-vol-music';
+  const SFX_KEY = 'dglz-v055-vol-sfx';
 
   function clampVol(n, fallback) {
     const v = Number(n);
@@ -32,7 +34,7 @@ const GameAudio = (() => {
     return Math.max(0, Math.min(100, Math.round(v)));
   }
 
-  let musicVol = clampVol(localStorage.getItem(MUSIC_KEY), 100);
+  let musicVol = clampVol(localStorage.getItem(MUSIC_KEY), 30);
   let sfxVol = clampVol(localStorage.getItem(SFX_KEY), 100);
 
   let ctx = null;
@@ -194,15 +196,28 @@ const GameAudio = (() => {
     nextGain._targetVol = target;
   }
 
-  function playSfx(name) {
-    if (!name || sfxVol <= 0) return;
+  function playSfx(ev) {
+    if (!ev || sfxVol <= 0) return;
+    let name = ev;
+    let speaker = '';
+    if (typeof ev === 'object') {
+      name = ev.id;
+      speaker = ev.name || '';
+    }
+    if (name === 'pass') {
+      const g =
+        typeof AudioDiff !== 'undefined' && AudioDiff.guessVoiceGender
+          ? AudioDiff.guessVoiceGender(speaker)
+          : 'm';
+      name = g === 'f' ? 'passF' : 'passM';
+    }
     ensureCtx();
     const url = SFX_URL[name];
     if (!url) return;
     const buf = buffers.get(url);
     if (!buf) {
       decode(url)
-        .then(() => playSfx(name))
+        .then(() => playSfx(ev))
         .catch(() => {});
       return;
     }

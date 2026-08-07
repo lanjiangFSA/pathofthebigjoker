@@ -1,4 +1,4 @@
-# Audio credits (v0.5.4)
+# Audio credits (v0.5.5)
 
 Final in-game assets under `public/audio/` (not `candidates/`).
 
@@ -14,7 +14,8 @@ Pass voice: Microsoft Edge Neural TTS via `edge-tts` (local generate).
 | `bgm-main.mp3` | wait / play BGM | Mixkit **Smile** — Michael Ramir C. |
 | `bgm-tension.mp3` | tension BGM (swap when any hand ≤10) | Mixkit **Games Music** — Grigoriy Nuzhny |
 | `sfx-play.mp3` | 出牌「唰」 | Mixkit Paper slide |
-| `sfx-pass.mp3` | 不出「要不起」 | Edge TTS zh-CN-XiaoyiNeural |
+| `sfx-pass-f.mp3` | 不出「要不起」女声 | Edge TTS zh-CN-XiaoyiNeural |
+| `sfx-pass-m.mp3` | 不出「要不起」男声 | Edge TTS zh-CN-YunjianNeural |
 | `sfx-deal.mp3` | 开局 | Mixkit unlock notification |
 | `sfx-your-turn.mp3` | 轮到你 | Mixkit quick positive notification |
 | `sfx-timer-warn.mp3` | 倒计时 ≤5s | Mixkit small hit |
@@ -23,4 +24,4 @@ Pass voice: Microsoft Edge Neural TTS via `edge-tts` (local generate).
 | `sfx-seat-join.mp3` | 入座 | Mixkit sci-fi notification |
 | `sfx-tension.mp3` | 进入紧张门槛 | Mixkit casino bling |
 
-Preview / rejects live in `public/audio/candidates/` (gitignored) and `public/audio-preview.html` (local audition only).
+Defaults (v0.5.5): music volume 30, SFX volume 100.

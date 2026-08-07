@@ -95,10 +95,20 @@ check('play and pass from trickLog append', () => {
     ],
   });
   const ev = diffAudioEvents(prev, next, 'p5');
-  assert.deepStrictEqual(
-    ev.sfx.filter((s) => s === 'pass' || s === 'play'),
-    ['pass', 'play']
-  );
+  const kinds = ev.sfx
+    .map((s) => (typeof s === 'object' ? s.id : s))
+    .filter((s) => s === 'pass' || s === 'play');
+  assert.deepStrictEqual(kinds, ['pass', 'play']);
+  const passEv = ev.sfx.find((s) => typeof s === 'object' && s.id === 'pass');
+  assert.strictEqual(passEv.name, 'p1');
+});
+
+check('guessVoiceGender from nicknames', () => {
+  const { guessVoiceGender } = require('./public/audio-diff.js');
+  assert.strictEqual(guessVoiceGender('小囡'), 'f');
+  assert.strictEqual(guessVoiceGender('阿妹'), 'f');
+  assert.strictEqual(guessVoiceGender('阿庆'), 'm');
+  assert.strictEqual(guessVoiceGender('册那队长'), 'm');
 });
 
 check('new lead after log shrink to one', () => {
