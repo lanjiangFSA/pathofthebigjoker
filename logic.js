@@ -271,6 +271,7 @@ function newRoom(opts = {}) {
     turn: 0,
     table: null,
     passes: 0,
+    trickLog: [],
     ranking: [],
     result: null,
     message: trumpRules ? '等待牌友入座（将牌升级已开）' : '等待牌友入座（将牌固定为 2）',
@@ -315,6 +316,108 @@ function subsetsOfSize(arr, size, limit = 800) {
   return out;
 }
 
+function handStrength(hand, trump) {
+  let score = 0;
+  score += hand.filter(isWild).length * 8;
+  score += hand.filter((c) => c.r === trump).length * 5;
+  score += hand.filter((c) => c.r === 'A' || c.r === 'K').length * 2;
+  const by = {};
+  hand.forEach((c) => {
+    if (isWild(c)) return;
+    by[c.r] = (by[c.r] || 0) + 1;
+  });
+  const counts = Object.values(by);
+  score += counts.filter((n) => n >= 5).length * 12;
+  score += counts.filter((n) => n === 4).length * 8;
+  score += counts.filter((n) => n === 3).length * 4;
+  score += counts.filter((n) => n === 2).length * 2;
+  return score;
+}
+
+function buildFiveCandidates(hand, wilds, by) {
+  const out = [];
+  const faces = Object.keys(by);
+  // 五同 / 四带一 / 三带两 from counts + wilds
+  for (const f of faces) {
+    const list = by[f];
+    for (let w = 0; w <= Math.min(wilds.length, 5); w++) {
+      if (list.length + w >= 5 && list.length >= 1) {
+        for (const body of subsetsOfSize(list, Math.min(list.length, 5 - w), 8)) {
+          for (const ws of subsetsOfSize(wilds, w, 6)) {
+            if (body.length + ws.length === 5) out.push([...body, ...ws]);
+          }
+        }
+      }
+    }
+    // 四带一: 4 of f + 1 kicker
+    for (let w = 0; w <= Math.min(wilds.length, 3); w++) {
+      const need = Math.max(0, 4 - list.length);
+      if (need > w) continue;
+      const take = Math.min(list.length, 4);
+      for (const body of subsetsOfSize(list, take, 6)) {
+        for (const ws of subsetsOfSize(wilds, w, 4)) {
+          const used = body.length + ws.length;
+          if (used > 5) continue;
+          const remain = 5 - used;
+          if (remain === 1) {
+            const kickers = hand.filter((c) => c.id !== body[0]?.id && !body.includes(c) && !ws.includes(c));
+            for (const k of kickers.slice(0, 12)) out.push([...body, ...ws, k]);
+          } else if (remain === 0 && body.length + ws.length === 5) {
+            out.push([...body, ...ws]);
+          }
+        }
+      }
+    }
+  }
+  // 三带两
+  for (let i = 0; i < faces.length; i++) {
+    for (let j = 0; j < faces.length; j++) {
+      if (i === j) continue;
+      const a = by[faces[i]];
+      const b = by[faces[j]];
+      for (let w = 0; w <= wilds.length; w++) {
+        for (let na = Math.min(a.length, 3); na >= 1; na--) {
+          for (let nb = Math.min(b.length, 2); nb >= 1; nb--) {
+            if (na + nb + w !== 5) continue;
+            if (na + Math.min(w, 3 - na) < 3) continue;
+            for (const ta of subsetsOfSize(a, na, 4)) {
+              for (const tb of subsetsOfSize(b, nb, 4)) {
+                for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...ta, ...tb, ...ws]);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  // Straights / flushes: sample windows with available ranks (bounded)
+  const normals = hand.filter((c) => !isWild(c));
+  for (const win of STRAIGHT_WINDOWS) {
+    const picks = [];
+    let miss = 0;
+    for (const face of win) {
+      const card = normals.find((c) => c.r === face && !picks.includes(c));
+      if (card) picks.push(card);
+      else miss++;
+    }
+    if (miss <= wilds.length && picks.length + Math.min(miss, wilds.length) === 5) {
+      out.push([...picks, ...wilds.slice(0, miss)]);
+    }
+  }
+  // Same-suit flushes (non-straight): take 5 of one suit + wilds
+  for (const s of suits) {
+    const suited = normals.filter((c) => c.s === s);
+    for (let w = 0; w <= Math.min(wilds.length, 4); w++) {
+      if (suited.length + w < 5) continue;
+      for (const five of subsetsOfSize(suited, 5 - w, 10)) {
+        for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...five, ...ws]);
+      }
+    }
+  }
+  if (wilds.length >= 5) for (const ws of subsetsOfSize(wilds, 5, 5)) out.push(ws);
+  return out;
+}
+
 function candidates(hand, trump, table) {
   const out = [];
   for (const c of hand) out.push([c]);
@@ -331,25 +434,32 @@ function candidates(hand, trump, table) {
     for (let w = 0; w <= wilds.length; w++) {
       for (let n = 1; n <= list.length; n++) {
         if (n + w === 2) {
-          for (const pair of subsetsOfSize(list, n, 50))
-            for (const ws of subsetsOfSize(wilds, w, 20)) out.push([...pair, ...ws]);
+          for (const pair of subsetsOfSize(list, n, 20))
+            for (const ws of subsetsOfSize(wilds, w, 10)) out.push([...pair, ...ws]);
         }
         if (n + w === 3) {
-          for (const trip of subsetsOfSize(list, n, 40))
-            for (const ws of subsetsOfSize(wilds, w, 15)) out.push([...trip, ...ws]);
+          for (const trip of subsetsOfSize(list, n, 15))
+            for (const ws of subsetsOfSize(wilds, w, 8)) out.push([...trip, ...ws]);
         }
       }
     }
   }
-  if (wilds.length >= 2) for (const ws of subsetsOfSize(wilds, 2, 20)) out.push(ws);
-  if (wilds.length >= 3) for (const ws of subsetsOfSize(wilds, 3, 20)) out.push(ws);
+  if (wilds.length >= 2) for (const ws of subsetsOfSize(wilds, 2, 10)) out.push(ws);
+  if (wilds.length >= 3) for (const ws of subsetsOfSize(wilds, 3, 10)) out.push(ws);
 
   const needFives = !table || table.kind >= KIND.mixedStraight;
-  if (needFives) for (const five of subsetsOfSize(hand, 5, 1500)) out.push(five);
+  if (needFives) {
+    const faceMap = {};
+    faces.forEach((f) => {
+      faceMap[f] = by[f];
+    });
+    for (const five of buildFiveCandidates(hand, wilds, faceMap)) out.push(five);
+  }
 
   const seen = new Set();
   const result = [];
   for (const cards of out) {
+    if (cards.length > 5 || cards.length < 1) continue;
     const key = cards
       .map((c) => c.id)
       .sort()
@@ -360,17 +470,6 @@ function candidates(hand, trump, table) {
     if (c && beats(c, table)) result.push({ cards, c });
   }
   return result.sort((a, b) => a.c.kind - b.c.kind || a.c.rank - b.c.rank);
-}
-
-function handStrength(hand, trump) {
-  let score = 0;
-  score += hand.filter(isWild).length * 8;
-  score += hand.filter((c) => c.r === trump).length * 5;
-  score += hand.filter((c) => c.r === 'A' || c.r === 'K').length * 2;
-  const fives = candidates(hand, trump, null).filter((x) => x.c.kind >= KIND.mixedStraight);
-  score += Math.min(6, fives.length) * 3;
-  score += fives.filter((x) => x.c.kind >= KIND.fullHouse).length * 4;
-  return score;
 }
 
 function assignRoles(r) {
@@ -524,17 +623,36 @@ function settle(r) {
     }
   }
 
+  // Scoreboard uses catch-based 计分 even when upgrade points are 0 (cases 6/7 etc).
+  const boardPoints = Math.max(points, scoreFromPlaces(places, winning));
+
   r.trump = r.trumpRules ? r.levels[r.banker] : '2';
   r.leadSeat = order[0].seat;
   r.started = false;
+  r.trickLog = [];
   if (!r.scores) r.scores = { red: 0, blue: 0 };
-  r.scores[winning] = (r.scores[winning] || 0) + points;
-  r.result = { winning, points, gain: steps, places, tributers, switchBanker };
+  r.scores[winning] = (r.scores[winning] || 0) + boardPoints;
+  r.result = { winning, points: boardPoints, upgradePoints: points, gain: steps, places, tributers, switchBanker };
   r.message = r.trumpRules
-    ? `${winning === 'red' ? '红队' : '蓝队'} +${points} 分（总分 ${r.scores[winning]}）/ 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}`
-    : `${winning === 'red' ? '红队' : '蓝队'} +${points} 分（总分 ${r.scores[winning]}）${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2`;
+    ? `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints} 分（总分 ${r.scores[winning]}）/ 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}。点「开始下一局」继续`
+    : `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints} 分（总分 ${r.scores[winning]}）${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2。点「开始下一局」继续`;
 
   if (tributers.length) applyAutoTribute(r, tributers, winning);
+}
+
+function scoreFromPlaces(places, winning) {
+  const other = winning === 'red' ? 'blue' : 'red';
+  const winSorted = [...(places[winning] || [])].sort((a, b) => a - b);
+  if (winSorted.length < 3) return 0;
+  const third = winSorted[2];
+  const caught = (places[other] || []).filter((p) => p > third).length;
+  if (caught >= 3) return 8;
+  if (caught === 2) return 5;
+  if (caught === 1) return 3;
+  if (places[winning].includes(1) && places[winning].includes(6)) {
+    return places[winning].some((p) => p >= 2 && p <= 4) ? 1 : 0;
+  }
+  return 0;
 }
 
 function lastTeamTribute(order, winning) {
@@ -595,6 +713,7 @@ function start(r) {
   r.turn = r.leadSeat;
   r.table = null;
   r.passes = 0;
+  r.trickLog = [];
   r.ranking = [];
   r.result = null;
   r.message = `${r.players[r.turn].name} 先出（庄：${r.players[r.bankerSeat].name}）；将牌：${r.trump}`;
@@ -603,14 +722,28 @@ function start(r) {
 function play(r, p, ids) {
   if (!r.started) throw Error('牌局尚未开始');
   if (r.players[r.turn].id !== p.id) throw Error('还没轮到你');
-  const cards = ids.map((id) => p.hand.find((c) => c.id === id));
-  if (cards.some((c) => !c)) throw Error('选牌已失效');
+  if (!ids?.length) throw Error('请先选牌');
+  const uniq = [...new Set(ids)];
+  const cards = uniq.map((id) => p.hand.find((c) => c.id === id));
+  if (cards.some((c) => !c)) throw Error('选牌已失效，请重新选');
+  if (![1, 2, 3, 5].includes(cards.length)) throw Error('只能出 1、2、3 或 5 张');
   const c = combo(cards, r.trump);
-  if (!c) throw Error('只可出合法单张、对子、三张或五路');
-  if (!beats(c, r.table?.combo)) throw Error('这手牌压不住桌面');
-  p.hand = p.hand.filter((card) => !ids.includes(card.id));
+  if (!c) {
+    if (cards.length === 3) throw Error('三张须点数相同（可用怪牌补）');
+    throw Error('只可出合法单张、对子、三张或五路');
+  }
+  if (!beats(c, r.table?.combo)) throw Error(`压不住：需大于桌上的${r.table.combo.label}`);
+  p.hand = p.hand.filter((card) => !uniq.includes(card.id));
   r.table = { player: p.id, cards, combo: c };
   r.passes = 0;
+  if (!r.trickLog) r.trickLog = [];
+  r.trickLog.push({
+    playerId: p.id,
+    name: p.name,
+    pass: false,
+    label: c.label,
+    cards: cards.map((x) => ({ r: x.r, s: x.s })),
+  });
   r.message = `${p.name}${p.bot ? '（AI）' : ''} 出了 ${c.label}`;
   if (!p.hand.length) {
     r.ranking.push(p.id);
@@ -627,11 +760,14 @@ function pass(r, p) {
   if (!r.started || r.players[r.turn].id !== p.id) throw Error('还没轮到你');
   if (!r.table) throw Error('首出不能过');
   r.passes++;
+  if (!r.trickLog) r.trickLog = [];
+  r.trickLog.push({ playerId: p.id, name: p.name, pass: true, label: '不出', cards: [] });
   r.message = `${p.name}${p.bot ? '（AI）' : ''} 不出`;
   if (r.passes >= activeCount(r) - 1) {
     const lead = r.table.player;
     r.table = null;
     r.passes = 0;
+    r.trickLog = [];
     r.turn = r.players.findIndex((x) => x.id === lead);
     if (r.ranking.includes(lead)) next(r);
     r.message = `无人再压，${r.players[r.turn].name} 获得出牌权`;
@@ -734,11 +870,27 @@ function pickBeat(options, r, p, seat, tableOwnerTeam) {
 }
 
 function botMove(r, p) {
+  if (!r.started || !p?.hand) return;
   const seat = r.players.indexOf(p);
+  if (seat < 0 || r.players[r.turn]?.id !== p.id) return;
   const tableCombo = r.table?.combo || null;
-  const options = candidates(p.hand, r.trump, tableCombo);
+  let options = [];
+  try {
+    options = candidates(p.hand, r.trump, tableCombo);
+  } catch (e) {
+    options = [];
+  }
   if (!tableCombo) {
-    if (!options.length) return;
+    if (!options.length) {
+      if (!p.hand.length) {
+        next(r);
+        return;
+      }
+      // Never stall: lead cheapest single
+      const sorted = sort([...p.hand], r.trump);
+      play(r, p, [sorted[sorted.length - 1].id]);
+      return;
+    }
     play(r, p, pickLead(options, r, p, seat).cards.map((c) => c.id));
     return;
   }
@@ -749,6 +901,8 @@ function botMove(r, p) {
 }
 
 function state(r, id) {
+  const me = r.players.find((p) => p.id === id);
+  const myTeam = me ? teamOf(r.players.indexOf(me)) : null;
   return {
     type: 'state',
     code: r.code,
@@ -765,6 +919,14 @@ function state(r, id) {
     ranking: r.ranking,
     result: r.result,
     message: r.message,
+    round: r.round,
+    trickLog: (r.trickLog || []).map((t) => ({
+      playerId: t.playerId,
+      name: t.name,
+      pass: !!t.pass,
+      label: t.label,
+      cards: t.cards || [],
+    })),
     table: r.table && {
       player: r.table.player,
       combo: { kind: r.table.combo.kind, rank: r.table.combo.rank, label: r.table.combo.label },
@@ -779,8 +941,9 @@ function state(r, id) {
       bot: p.bot,
       done: r.ranking.includes(p.id),
       role: p.role,
+      teammate: myTeam != null && teamOf(i) === myTeam && p.id !== id,
     })),
-    hand: r.players.find((p) => p.id === id)?.hand || [],
+    hand: me?.hand || [],
   };
 }
 
@@ -810,4 +973,5 @@ module.exports = {
   assignRoles,
   findStraightWindow,
   pointsToSteps,
+  scoreFromPlaces,
 };
