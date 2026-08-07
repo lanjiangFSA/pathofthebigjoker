@@ -116,9 +116,15 @@ function assert(cond, msg) {
         assert(text.includes('layoutHand'), 'fan layout');
         assert(text.includes('bindHandDrag') || text.includes('onpointermove'), 'drag select');
         assert(text.includes('scores'), 'renders scores');
+        assert(text.includes('trickLog') || text.includes('trick-log'), 'trick history');
+        assert(text.includes('队友') || text.includes('teammate'), 'teammate label');
       }
       if (f === '/style.css') {
         assert(text.includes('touch-action:none') || text.includes('touch-action: none'), 'hand drag css');
+        assert(text.includes('trick-log'), 'trick log css');
+      }
+      if (f === '/') {
+        assert(text.includes('trickLog'), 'trickLog in html');
       }
     }
     console.log('OK assets and UI markers');

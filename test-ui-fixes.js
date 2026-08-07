@@ -89,6 +89,7 @@ check('settle accumulates score from 0', () => {
   settle(r);
   assert.strictEqual(r.scores.red, 8);
   assert.strictEqual(r.scores.blue, 0);
+  assert.ok(r.result.points >= 8);
 });
 
 if (failed) {
