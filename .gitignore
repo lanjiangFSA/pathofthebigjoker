@@ -12,3 +12,6 @@ release.md
 
 # Local deploy and GitHub SSH credentials (never commit)
 .ssh/
+
+# Audio audition rejects (final picks live in public/audio/*.mp3)
+public/audio/candidates/

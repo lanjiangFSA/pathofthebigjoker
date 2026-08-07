@@ -86,7 +86,19 @@ body:has(#table:not([hidden])) main{
 }
 .top-left,.top-mid,.top-scores{display:flex;align-items:center;gap:5px;flex-wrap:wrap}
 .topbar b{color:#f9cf66;font-size:16px}
-#copy{padding:4px 8px;font-size:11px;background:#405d7a}
+#copy,#audioMenuBtn{padding:4px 8px;font-size:11px;background:#405d7a}
+#audioMenuBtn[aria-pressed="true"]{background:#5a4040;opacity:.85}
+.audio-menu{position:relative}
+.audio-menu-panel{
+  position:absolute;top:calc(100% + 4px);left:0;z-index:40;
+  min-width:180px;padding:10px 12px;border-radius:8px;
+  background:#1e2a38;border:1px solid #4a6280;box-shadow:0 8px 20px #0006;
+}
+.vol-row{
+  display:grid;grid-template-columns:36px 1fr 28px;align-items:center;gap:8px;
+  margin:6px 0;font-size:12px;color:#d7e3f0;white-space:nowrap;
+}
+.vol-row input[type=range]{width:100%;accent-color:#7eb6ff}
 #trumpMode,#status{font-size:11px;color:#9fb2ca}
 .top-scores{font-size:13px}
 .top-scores .sep{opacity:.5;margin:0 3px}

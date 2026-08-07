@@ -4,7 +4,45 @@ const crypto = require('crypto');
 const ranks = ['3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A', '2', '小怪', '大怪'];
 const gradeRanks = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const suits = ['♠', '♥', '♣', '♦'];
-const botNames = ['小虎机', '阿福', '路子王', '小囡', '老克勒'];
+/** Shanghai-casual nicknames for AI seats (≤12 chars; shuffled per fill). */
+const botNames = [
+  '小虎机',
+  '阿福',
+  '路子王',
+  '小囡',
+  '老克勒',
+  '册那队长',
+  '阿庆',
+  '阿祥',
+  '阿根',
+  '阿德',
+  '小滑头',
+  '十三点',
+  '老模子',
+  '白相人',
+  '小开',
+  '弄堂精',
+  '洋泾浜',
+  '老虎灶',
+  '小赤佬',
+  '螺丝壳',
+  '黄鱼头',
+  '石库门',
+  '亭子间',
+  '外滩仔',
+  '大世界',
+];
+
+function shuffleNames(list) {
+  const a = list.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const t = a[i];
+    a[i] = a[j];
+    a[j] = t;
+  }
+  return a;
+}
 const FACE = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 const STRAIGHT_WINDOWS = [
   ['A', '2', '3', '4', '5'],
@@ -291,10 +329,11 @@ function addPlayer(r, name, bot = false) {
 }
 
 function addBots(r) {
+  const pool = shuffleNames(botNames);
   let n = 0;
   while (r.players.length < 6) {
-    let name = botNames[n++ % botNames.length];
-    while (r.players.some((p) => p.name === name)) name += Math.ceil(Math.random() * 9);
+    let name = pool[n++ % pool.length];
+    while (r.players.some((p) => p.name === name)) name = `${name}${Math.ceil(Math.random() * 9)}`;
     addPlayer(r, name, true);
   }
 }

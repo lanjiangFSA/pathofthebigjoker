@@ -25,6 +25,19 @@
       <div class="top-left">
         <span class="tag">房间</span><b id="room"></b>
         <button type="button" id="copy">复制</button>
+        <div class="audio-menu">
+          <button type="button" id="audioMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="audioMenu">声音 ▾</button>
+          <div id="audioMenu" class="audio-menu-panel" hidden>
+            <label class="vol-row">音乐
+              <input type="range" id="volMusic" min="0" max="100" value="100" step="1">
+              <span id="volMusicVal">100</span>
+            </label>
+            <label class="vol-row">音效
+              <input type="range" id="volSfx" min="0" max="100" value="100" step="1">
+              <span id="volSfxVal">100</span>
+            </label>
+          </div>
+        </div>
       </div>
       <div class="top-mid">
         将牌 <b id="trump">2</b>
@@ -72,6 +85,8 @@
   </section>
 </main>
 <script src="hand-select.js"></script>
+<script src="audio-diff.js"></script>
+<script src="audio.js"></script>
 <script src="game.js"></script>
 </body>
 </html>

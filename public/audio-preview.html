@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>音频试听 · 大怪路子 v0.5.4</title>
+<style>
+  :root { --fg:#f5efe6; --accent:#c45c26; --muted:#a89880; --card:#2a2218; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI","PingFang SC","Microsoft YaHei",sans-serif; background:linear-gradient(160deg,#1a1510,#2c1810 50%,#1a2030); color:var(--fg); min-height:100vh; padding:1.25rem; }
+  h1 { font-size:1.4rem; margin:0 0 .35rem; }
+  .lead { color:var(--muted); margin:0 0 1.25rem; max-width:44rem; line-height:1.5; }
+  section { background:var(--card); border-radius:12px; padding:1rem 1.1rem; margin-bottom:1rem; border:1px solid #3d3226; }
+  h2 { font-size:1.05rem; margin:0 0 .75rem; color:#f0c27a; }
+  .row { display:flex; flex-wrap:wrap; gap:.5rem; align-items:center; margin:.4rem 0; }
+  button, select { font:inherit; padding:.45rem .75rem; border-radius:8px; border:1px solid #5a4a38; background:#3a2e22; color:var(--fg); cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); border-color:#e07a40; color:#fff; }
+  button.stop { background:#5a3030; }
+  label { color:var(--muted); font-size:.9rem; }
+  .tag { font-size:.75rem; color:#8ab; }
+  .note { font-size:.85rem; color:var(--muted); line-height:1.45; }
+  code { background:#0003; padding:.1rem .35rem; border-radius:4px; }
+</style>
+<body>
+  <h1>音频试听（新候选）</h1>
+  <p class="lead">tension 改为<strong>换一首现成更快的 BGM</strong>（不合成鼓、不叠第二轨）。请对比 wait / play / tension。</p>
+
+  <section>
+    <h2>出牌「唰」候选</h2>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-paper-slide.mp3">paper-slide</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-paper-quick-slice.mp3">paper-quick-slice</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-paper-quick-movement.mp3">paper-quick-movement</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-page-turn.mp3">page-turn</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-fast-swipe-zoom.mp3">fast-swipe-zoom</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/sfx-fast-air-woosh.mp3">fast-air-woosh</button></div>
+    <div class="row"><button type="button" class="stop" id="stopAll">全部停止</button></div>
+  </section>
+
+  <section>
+    <h2>BGM 单曲试听</h2>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-feeling-happy.mp3">Feeling Happy</button><span class="tag">偏轻松</span></div>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-smile.mp3">Smile</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-kidding-around.mp3">Kidding Around</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-games-music.mp3">Games Music</button><span class="tag">偏游戏/紧张候选</span></div>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-punked-up-fun.mp3">Punked Up Fun</button><span class="tag">偏快/紧张候选</span></div>
+    <div class="row"><button type="button" data-play="audio/candidates/bgm-feel-alive.mp3">Feel Alive</button><span class="tag">偏活力/紧张候选</span></div>
+  </section>
+
+  <section>
+    <h2>三态变奏预览</h2>
+    <p class="note">wait / play 用「主 BGM」（wait 降速）；tension <strong>换曲</strong>为下面选的紧张轨（可略提速 1.06）。</p>
+    <div class="row">
+      <label>主 BGM（wait/play）
+        <select id="mainPick">
+          <option value="audio/candidates/bgm-feeling-happy.mp3">Feeling Happy</option>
+          <option value="audio/candidates/bgm-smile.mp3" selected>Smile</option>
+          <option value="audio/candidates/bgm-kidding-around.mp3">Kidding Around</option>
+          <option value="audio/candidates/bgm-feel-alive.mp3">Feel Alive</option>
+          <option value="audio/candidates/bgm-games-music.mp3">Games Music</option>
+          <option value="audio/candidates/bgm-punked-up-fun.mp3">Punked Up Fun</option>
+        </select>
+      </label>
+      <label>紧张 BGM（tension）
+        <select id="tensionPick">
+          <option value="audio/candidates/bgm-punked-up-fun.mp3">Punked Up Fun</option>
+          <option value="audio/candidates/bgm-games-music.mp3" selected>Games Music</option>
+          <option value="audio/candidates/bgm-feel-alive.mp3">Feel Alive</option>
+          <option value="audio/candidates/bgm-kidding-around.mp3">Kidding Around</option>
+          <option value="audio/candidates/bgm-feeling-happy.mp3">Feeling Happy</option>
+          <option value="audio/candidates/bgm-smile.mp3">Smile</option>
+        </select>
+      </label>
+    </div>
+    <div class="row">
+      <button type="button" class="primary" data-phase="wait">wait</button>
+      <button type="button" class="primary" data-phase="play">play</button>
+      <button type="button" class="primary" data-phase="tension">tension</button>
+      <button type="button" class="stop" id="stopPhase">停止相位</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>不出「要不起」</h2>
+    <div class="row"><button type="button" data-play="audio/candidates/pass-yaobuqi-xiaoyi.mp3">xiaoyi</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/pass-yaobuqi-yunjian.mp3">yunjian</button></div>
+    <div class="row"><button type="button" data-play="audio/candidates/pass-yaobuqi-xiaobei.mp3">xiaobei</button></div>
+  </section>
+
+  <p class="note">打开：<code>http://localhost:3000/audio-preview.html</code> · 请 Ctrl+F5 强刷</p>
+<script>
+const htmlPlayers = [];
+let ctx, melSrc, melGain;
+const bufferCache = new Map();
+
+function stopHtml() {
+  while (htmlPlayers.length) {
+    const a = htmlPlayers.pop();
+    try { a.pause(); a.src = ''; } catch (_) {}
+  }
+}
+function playHtml(url) {
+  stopHtml();
+  stopPhase();
+  const a = new Audio(url);
+  a.play().catch((e) => alert(e.message));
+  htmlPlayers.push(a);
+}
+async function ensureCtx() {
+  if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
+  if (ctx.state === 'suspended') await ctx.resume();
+  return ctx;
+}
+async function loadBuf(url) {
+  if (bufferCache.has(url)) return bufferCache.get(url);
+  const res = await fetch(url);
+  const arr = await res.arrayBuffer();
+  const buf = await (await ensureCtx()).decodeAudioData(arr.slice(0));
+  bufferCache.set(url, buf);
+  return buf;
+}
+function stopPhase() {
+  try { melSrc?.stop(); } catch (_) {}
+  melSrc = null;
+}
+async function playPhase(phase) {
+  stopHtml();
+  stopPhase();
+  const ac = await ensureCtx();
+  const mainUrl = document.getElementById('mainPick').value;
+  const tensionUrl = document.getElementById('tensionPick').value;
+  const url = phase === 'tension' ? tensionUrl : mainUrl;
+  const rates = { wait: 0.88, play: 1.0, tension: 1.06 };
+  const vols = { wait: 0.45, play: 0.62, tension: 0.7 };
+  const buf = await loadBuf(url);
+  melGain = ac.createGain();
+  melGain.gain.value = vols[phase];
+  melGain.connect(ac.destination);
+  melSrc = ac.createBufferSource();
+  melSrc.buffer = buf;
+  melSrc.loop = true;
+  melSrc.playbackRate.value = rates[phase];
+  melSrc.connect(melGain);
+  melSrc.start();
+}
+document.querySelectorAll('[data-play]').forEach((btn) => {
+  btn.addEventListener('click', () => playHtml(btn.getAttribute('data-play')));
+});
+document.querySelectorAll('[data-phase]').forEach((btn) => {
+  btn.addEventListener('click', () => playPhase(btn.getAttribute('data-phase')).catch((e) => alert(e.message)));
+});
+document.getElementById('stopAll').onclick = () => { stopHtml(); stopPhase(); };
+document.getElementById('stopPhase').onclick = () => stopPhase();
+</script>
+</body>
+</html>

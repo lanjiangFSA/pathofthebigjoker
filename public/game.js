@@ -1,7 +1,18 @@
 let me, room, state, chosen = [];
 let timerTick = null;
+let audioPrev = null;
+let audioBootstrapped = false;
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
+
+function unlockAudio() {
+  if (typeof GameAudio !== 'undefined') GameAudio.unlock();
+}
+
+function applyAudio(prev, next, opts) {
+  if (typeof GameAudio === 'undefined') return;
+  GameAudio.applyDiff(prev, next, me, opts);
+}
 
 /** Relative seat 0=self → slot (clockwise from bottom). leftL unused. */
 const REL_SLOTS_6 = ['bottom', 'rightL', 'rightU', 'topR', 'topL', 'leftU'];
@@ -42,6 +53,9 @@ function relayoutHand() {
 function enter(x) {
   me = x.id;
   room = x.code;
+  audioPrev = null;
+  audioBootstrapped = false;
+  unlockAudio();
   $('#lobby').hidden = true;
   $('#table').hidden = false;
   $('#room').textContent = room;
@@ -55,6 +69,10 @@ function enter(x) {
     const next = JSON.parse(e.data);
     const ids = new Set((next.hand || []).map((c) => c.id));
     chosen = chosen.filter((id) => ids.has(id));
+    const snapshot = !audioBootstrapped;
+    applyAudio(audioPrev, next, { snapshot });
+    audioBootstrapped = true;
+    audioPrev = next;
     state = next;
     render();
   };
@@ -62,6 +80,7 @@ function enter(x) {
 
 async function enterRoom(join) {
   try {
+    unlockAudio();
     const name = $('#name').value;
     enter(
       join
@@ -123,6 +142,8 @@ function updateTimer() {
   const who = state.players[state.turn];
   $('#timerWho').textContent = who ? `${who.name}` : '';
   $('.clock-face').classList.toggle('warn', sec <= 5);
+  const mine = who && who.id === me;
+  if (typeof GameAudio !== 'undefined') GameAudio.maybeTimerWarn(sec, !!mine);
 }
 
 function renderSeats() {
@@ -251,12 +272,22 @@ syncAppShell();
 if (timerTick) clearInterval(timerTick);
 timerTick = setInterval(updateTimer, 200);
 
-$('#start').onclick = () => api('/api/start', { code: room, id: me }).catch((e) => alert(e.message));
-$('#play').onclick = () =>
+$('#start').onclick = () => {
+  unlockAudio();
+  api('/api/start', { code: room, id: me }).catch((e) => alert(e.message));
+};
+$('#play').onclick = () => {
+  unlockAudio();
   api('/api/play', { code: room, id: me, cards: chosen }).catch((e) => alert(e.message));
-$('#pass').onclick = () => api('/api/pass', { code: room, id: me }).catch((e) => alert(e.message));
+};
+$('#pass').onclick = () => {
+  unlockAudio();
+  api('/api/pass', { code: room, id: me }).catch((e) => alert(e.message));
+};
 $('#copy').onclick = async () => {
   await navigator.clipboard.writeText(room);
   $('#copy').textContent = '已复制';
   setTimeout(() => ($('#copy').textContent = '复制'), 1000);
 };
+
+if (typeof GameAudio !== 'undefined') GameAudio.bindVolumeControls();
