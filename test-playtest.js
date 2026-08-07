@@ -123,6 +123,8 @@ function assert(cond, msg) {
         assert(text.includes('handcard'), 'hits .handcard');
         assert(text.includes('SelectionModel'), 'SelectionModel');
         assert(text.includes('elementsFromPoint'), 'pointer hit-test');
+        assert(text.includes('fitColumns') || text.includes('hand-rows-2'), 'fit-to-width / two-row');
+        assert(text.includes('MIN_COL_W') || text.includes('fitColumns'), 'column fit constants');
       }
       if (f === '/game.js') {
         assert(text.includes('count <= 10'), 'seat count gate');
@@ -151,7 +153,9 @@ function assert(cond, msg) {
         assert(text.includes('orientation:portrait') || text.includes('orientation: portrait'), 'portrait layout');
         assert(text.includes('safe-area-inset-bottom'), 'safe area padding');
         assert(text.includes('--hand-peek'), 'hand peek css var');
-        assert(text.includes('--dock-h'), 'dock-h var');
+        assert(text.includes('flex-wrap') || text.includes('flex-wrap:wrap'), 'hand wrap');
+        assert(text.includes('hand-rows-2'), 'two-row hand class');
+        assert(text.includes('--hand-col-w'), 'col width css var');
       }
     }
     console.log('OK assets and UI markers');

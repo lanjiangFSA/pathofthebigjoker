@@ -11,11 +11,39 @@
   const PEEK = 28;
   const CARD_H = 64;
 
+  const MIN_COL_W = 22;
+  const MAX_COL_W = 40;
+  const COL_GAP = 3;
+
   function layoutMetrics(handEl) {
     const cs = getComputedStyle(handEl);
     const peek = parseFloat(cs.getPropertyValue('--hand-peek')) || PEEK;
     const cardH = parseFloat(cs.getPropertyValue('--hand-card-h')) || CARD_H;
     return { peek, cardH };
+  }
+
+  /** Fit rank columns into one screen: scale width, wrap to 2 rows if needed. */
+  function fitColumns(rankCount, availWidth) {
+    const n = Math.max(0, rankCount | 0);
+    const avail = Math.max(0, availWidth | 0);
+    if (!n) return { rows: 1, colW: MAX_COL_W, perRow: 0 };
+
+    const widthFor = (count) => {
+      const gaps = COL_GAP * Math.max(0, count - 1);
+      return Math.floor((avail - gaps) / count);
+    };
+
+    let colW = widthFor(n);
+    if (colW >= MIN_COL_W) {
+      return { rows: 1, colW: Math.min(MAX_COL_W, colW), perRow: n };
+    }
+    const perRow = Math.ceil(n / 2);
+    colW = widthFor(perRow);
+    return {
+      rows: 2,
+      colW: Math.max(MIN_COL_W, Math.min(MAX_COL_W, colW)),
+      perRow,
+    };
   }
 
   function rankScore(r, trump) {
@@ -123,8 +151,20 @@
       groups.get(k).push(c);
     });
     const order = [...groups.keys()].sort((a, b) => rankScore(b, trump) - rankScore(a, trump));
-    const { peek, cardH } = layoutMetrics(handEl);
+    const base = layoutMetrics(handEl);
+    const padX = 18;
+    const avail = Math.max(0, (handEl.clientWidth || handEl.offsetWidth || 320) - padX);
+    const fit = fitColumns(order.length, avail);
+    const scale = fit.colW / MAX_COL_W;
+    const peek = Math.max(12, Math.round(base.peek * Math.max(0.55, scale)));
+    const cardH = Math.max(32, Math.round(base.cardH * Math.max(0.55, scale)));
     handEl.dataset.peek = String(peek);
+    handEl.dataset.rows = String(fit.rows);
+    handEl.classList.toggle('hand-rows-2', fit.rows === 2);
+    handEl.style.setProperty('--hand-col-w', `${fit.colW}px`);
+    handEl.style.setProperty('--hand-peek', `${peek}px`);
+    handEl.style.setProperty('--hand-card-h', `${cardH}px`);
+    handEl.style.gap = `${COL_GAP}px`;
 
     handEl.innerHTML = '';
     order.forEach((rank) => {
@@ -132,12 +172,14 @@
       const col = document.createElement('div');
       col.className = 'rank-col';
       col.dataset.rank = rank;
+      col.style.width = `${fit.colW}px`;
       cards.forEach((c, i) => {
         const d = makeCardEl(c, 'handcard');
         if ((chosen || []).includes(c.id)) d.classList.add('selected');
-        // Stack downward so each card's TOP (rank/suit) remains the visible peek strip
         d.style.top = `${i * peek}px`;
         d.style.bottom = 'auto';
+        d.style.width = `${fit.colW}px`;
+        d.style.height = `${cardH}px`;
         d.dataset.z = String(i + 1);
         d.style.zIndex = String(i + 1);
         col.append(d);
@@ -297,8 +339,11 @@
   global.HandSelect = {
     PEEK,
     CARD_H,
+    MIN_COL_W,
+    MAX_COL_W,
     RANK_ORDER,
     SelectionModel,
+    fitColumns,
     layout,
     paint,
     bind,

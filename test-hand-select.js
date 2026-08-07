@@ -23,6 +23,10 @@ assert.strictEqual(typeof HS.layout, 'function');
 assert.strictEqual(typeof HS.bind, 'function');
 assert.ok(String(src).includes('layoutMetrics') || String(src).includes('--hand-peek'), 'css peek metrics');
 assert.ok(String(src).includes('Math.floor(rel / peek)') || String(src).includes('rel / peek'), 'peek-index hit test');
+assert.strictEqual(typeof HS.fitColumns, 'function', 'fitColumns export');
+assert.ok(HS.fitColumns(8, 320).rows === 1, '8 cols fit one row');
+assert.ok(HS.fitColumns(16, 200).rows === 2, 'many cols wrap to two rows');
+assert.ok(String(src).includes('hand-rows-2'), 'two-row class toggle');
 
 
 
