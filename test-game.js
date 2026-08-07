@@ -19,7 +19,12 @@ const {
   autoAct,
   checkTimeout,
   TURN_MS,
+  TURN_MS_FIRST,
   armTurn,
+  isSureWinCards,
+  teamCleared,
+  shouldSettle,
+  teamOf,
 } = require('./logic');
 
 function C(r, s = '♠') {
@@ -206,19 +211,34 @@ check('settle accumulates score from 0', () => {
   assert.ok(r.result.points >= 8);
 });
 
-check('TURN_MS is 15s', () => {
-  assert.strictEqual(TURN_MS, 15000);
+check('TURN_MS is 25s and first lead 45s', () => {
+  assert.strictEqual(TURN_MS, 25000);
+  assert.strictEqual(TURN_MS_FIRST, 45000);
 });
 
-check('start arms turnDeadline', () => {
+check('start arms first-lead deadline', () => {
   const r = newRoom();
   addPlayer(r, 'H');
   start(r);
   assert.ok(r.turnDeadline);
+  assert.ok(!r.firstLeadDone);
   assert.ok(r.turnDeadline > Date.now());
-  assert.ok(r.turnDeadline <= Date.now() + TURN_MS + 50);
+  assert.ok(r.turnDeadline <= Date.now() + TURN_MS_FIRST + 50);
   const st = state(r, r.players[0].id);
   assert.ok(st.turnDeadline);
+  assert.strictEqual(st.turnMs, TURN_MS_FIRST);
+});
+
+check('after first play uses TURN_MS', () => {
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  r.turn = r.players.indexOf(h);
+  r.table = null;
+  const card = h.hand[0];
+  play(r, h, [card.id]);
+  assert.ok(r.firstLeadDone);
+  const st = state(r, h.id);
   assert.strictEqual(st.turnMs, TURN_MS);
 });
 
@@ -261,10 +281,145 @@ check('autoAct passes when cannot beat', () => {
   r.turn = r.players.findIndex((p) => p.id === h.id);
   r.passes = 0;
   r.trickLog = [];
+  r.firstLeadDone = true;
   armTurn(r);
   assert.ok(autoAct(r));
   assert.ok(String(r.message).includes('超时'));
   assert.ok(r.passes >= 1 || !r.table || r.message.includes('不出') || r.message.includes('获得出牌权'));
+});
+
+check('autoAct follow always passes even if can beat', () => {
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  r.players.forEach((p) => {
+    p.bot = true;
+  });
+  h.bot = false;
+  r.firstLeadDone = true;
+  const other = r.players.find((p) => p.id !== h.id);
+  const weak = { id: 't3', r: '3', s: '♠' };
+  h.hand = [
+    { id: 'hb', r: '大怪', s: '★' },
+    { id: 'h2', r: '2', s: '♥' },
+  ];
+  r.table = {
+    player: other.id,
+    cards: [weak],
+    combo: { kind: KIND.single, rank: 1, label: '单张' },
+  };
+  r.turn = r.players.findIndex((p) => p.id === h.id);
+  r.passes = 0;
+  r.trickLog = [];
+  const before = h.hand.length;
+  assert.ok(autoAct(r));
+  assert.strictEqual(h.hand.length, before);
+  assert.ok(String(r.message).includes('不出') || String(r.message).includes('超时'));
+});
+
+check('isSureWinCards joker shapes', () => {
+  assert.ok(isSureWinCards([{ r: '大怪', s: '★' }]));
+  assert.ok(isSureWinCards([{ r: '大怪', s: '★' }, { r: '大怪', s: '★' }]));
+  assert.ok(
+    isSureWinCards([
+      { r: '大怪', s: '★' },
+      { r: '大怪', s: '★' },
+      { r: '大怪', s: '★' },
+    ])
+  );
+  assert.ok(
+    isSureWinCards([
+      { r: '大怪', s: '★' },
+      { r: '小怪', s: '★' },
+      { r: '小怪', s: '★' },
+    ])
+  );
+  assert.ok(
+    isSureWinCards([
+      { r: '大怪', s: '★' },
+      { r: '大怪', s: '★' },
+      { r: '小怪', s: '★' },
+    ])
+  );
+  assert.ok(!isSureWinCards([{ r: '小怪', s: '★' }]));
+  assert.ok(!isSureWinCards([{ r: '大怪', s: '★' }, { r: '小怪', s: '★' }]));
+});
+
+check('sure-win single 大怪 skips pass circle', () => {
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  r.players.forEach((p) => {
+    p.bot = true;
+  });
+  h.bot = false;
+  r.firstLeadDone = true;
+  r.turn = r.players.indexOf(h);
+  r.table = null;
+  r.passes = 0;
+  r.trickLog = [];
+  const big = { id: 'big1', r: '大怪', s: '★' };
+  h.hand = [big, { id: 'n3', r: '3', s: '♠' }, { id: 'n4', r: '4', s: '♠' }];
+  play(r, h, [big.id]);
+  assert.ok(!r.table, 'table cleared after sure-win');
+  assert.ok(String(r.message).includes('天王') || String(r.message).includes('自动过'));
+  assert.strictEqual(r.turn, r.players.indexOf(h));
+});
+
+check('short hand auto-passes on armTurn', () => {
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  r.players.forEach((p) => {
+    p.bot = true;
+  });
+  h.bot = false;
+  r.firstLeadDone = true;
+  const other = r.players.find((p) => p.id !== h.id);
+  h.hand = [
+    { id: 'a', r: '3', s: '♠' },
+    { id: 'b', r: '4', s: '♠' },
+  ];
+  r.table = {
+    player: other.id,
+    cards: [
+      { id: 't1', r: '5', s: '♠' },
+      { id: 't2', r: '5', s: '♥' },
+      { id: 't3', r: '5', s: '♦' },
+      { id: 't4', r: '5', s: '♣' },
+      { id: 't5', r: '6', s: '♠' },
+    ],
+    combo: { kind: KIND.fourPlus, rank: 10, label: '四带一' },
+  };
+  r.turn = r.players.indexOf(h);
+  r.passes = 0;
+  r.trickLog = [];
+  armTurn(r);
+  assert.ok(
+    String(r.message).includes('牌不够') ||
+      String(r.message).includes('不出') ||
+      !r.table ||
+      r.turn !== r.players.indexOf(h)
+  );
+});
+
+check('team of three finished settles early', () => {
+  const r = newRoom();
+  addPlayer(r, 'H');
+  start(r);
+  const redIds = r.players.filter((_, i) => teamOf(i) === 'red').map((p) => p.id);
+  assert.strictEqual(redIds.length, 3);
+  r.ranking = [...redIds];
+  assert.ok(teamCleared(r));
+  assert.ok(shouldSettle(r));
+  r.players.forEach((p) => {
+    if (!r.ranking.includes(p.id) && !p.hand.length) {
+      p.hand = [{ id: uid(), r: '3', s: '♠' }];
+    }
+  });
+  settle(r);
+  assert.ok(!r.started);
+  assert.strictEqual(r.ranking.length, 6);
 });
 
 check('checkTimeout ignores bots and future deadline', () => {
