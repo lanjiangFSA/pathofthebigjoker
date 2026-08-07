@@ -101,7 +101,7 @@ function assert(cond, msg) {
     console.log('OK trumpRules create on/off');
 
     // 3) static assets
-    for (const f of ['/', '/style.css', '/game.js']) {
+    for (const f of ['/', '/style.css', '/game.js', '/hand-select.js']) {
       const r = await fetch(base + f);
       assert(r.ok, `asset ${f}`);
       const text = await r.text();
@@ -112,17 +112,27 @@ function assert(cond, msg) {
         assert(text.includes('table-arena'), 'table arena');
         assert(text.includes('turn-timer'), 'turn timer');
         assert(text.includes('trickLog'), 'trickLog in html');
+        assert(text.includes('hand-select.js'), 'loads hand-select before game');
+        assert(text.indexOf('hand-select.js') < text.indexOf('game.js'), 'hand-select before game.js');
+      }
+      if (f === '/hand-select.js') {
+        assert(text.includes('HandSelect'), 'HandSelect export');
+        assert(text.includes('PEEK'), 'PEEK constant');
+        assert(/PEEK\s*=\s*(\d+)/.test(text) && Number(RegExp.$1) >= 28, 'PEEK >= 28');
+        assert(text.includes('handcard'), 'hits .handcard');
+        assert(text.includes('SelectionModel'), 'SelectionModel');
+        assert(text.includes('elementsFromPoint'), 'pointer hit-test');
       }
       if (f === '/game.js') {
         assert(text.includes('count <= 10'), 'seat count gate');
         assert(text.includes('playedBy'), 'playedBy render');
-        assert(text.includes('rank-col') || text.includes('layoutRankColumns'), 'rank columns');
-        assert(text.includes('bindHandDrag') || text.includes('onpointermove'), 'drag select');
+        assert(text.includes('HandSelect'), 'uses HandSelect');
         assert(text.includes('scores'), 'renders scores');
         assert(text.includes('trickLog') || text.includes('trick-log'), 'trick history');
         assert(text.includes('队友') || text.includes('teammate'), 'teammate label');
         assert(text.includes('turnDeadline') || text.includes('updateTimer'), 'timer ui');
         assert(text.includes('REL_SLOTS') || text.includes('seat-slot'), 'relative seats');
+        assert(!text.includes('layoutRankColumns'), 'hand layout moved out');
       }
       if (f === '/style.css') {
         assert(text.includes('touch-action:none') || text.includes('touch-action: none'), 'hand drag css');
@@ -130,6 +140,7 @@ function assert(cond, msg) {
         assert(text.includes('table-arena'), 'arena css');
         assert(text.includes('rank-col'), 'rank-col css');
         assert(text.includes('turn-timer'), 'timer css');
+        assert(!text.includes('col-selected'), 'no whole-column force select');
       }
     }
     console.log('OK assets and UI markers');
