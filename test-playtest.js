@@ -141,8 +141,11 @@ function assert(cond, msg) {
         assert(text.includes('rank-col'), 'rank-col css');
         assert(text.includes('turn-timer'), 'timer css');
         assert(!text.includes('col-selected'), 'no whole-column force select');
-        assert(text.includes('100dvh') || text.includes('100dvh'), 'mobile dvh viewport');
-        assert(text.includes('max-height:480px') || text.includes('max-height: 480px'), 'short-screen layout');
+        assert(text.includes('100dvh') || text.includes('100svh'), 'mobile dvh/svh viewport');
+        assert(text.includes('orientation:landscape') || text.includes('orientation: landscape'), 'landscape layout');
+        assert(text.includes('orientation:portrait') || text.includes('orientation: portrait'), 'portrait layout');
+        assert(text.includes('safe-area-inset-bottom'), 'safe area padding');
+        assert(text.includes('--hand-peek'), 'hand peek css var');
         assert(text.includes('flex:1 1 0') || text.includes('flex: 1 1 0'), 'arena flex shrink');
       }
     }

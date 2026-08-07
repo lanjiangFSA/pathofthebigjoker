@@ -7,9 +7,16 @@
   'use strict';
 
   const RANK_ORDER = ['大怪', '小怪', '2', 'A', 'K', 'Q', 'J', '10', '9', '8', '7', '6', '5', '4', '3'];
-  /** Visible header strip (horizontal rank+suit); must match overlap so tops stay readable. */
+  /** Visible header strip (horizontal rank+suit); overridable via --hand-peek CSS. */
   const PEEK = 28;
-  const CARD_H = 68;
+  const CARD_H = 64;
+
+  function layoutMetrics(handEl) {
+    const cs = getComputedStyle(handEl);
+    const peek = parseFloat(cs.getPropertyValue('--hand-peek')) || PEEK;
+    const cardH = parseFloat(cs.getPropertyValue('--hand-card-h')) || CARD_H;
+    return { peek, cardH };
+  }
 
   function rankScore(r, trump) {
     if (r === '大怪') return 1000;
@@ -116,6 +123,8 @@
       groups.get(k).push(c);
     });
     const order = [...groups.keys()].sort((a, b) => rankScore(b, trump) - rankScore(a, trump));
+    const { peek, cardH } = layoutMetrics(handEl);
+    handEl.dataset.peek = String(peek);
 
     handEl.innerHTML = '';
     order.forEach((rank) => {
@@ -127,13 +136,13 @@
         const d = makeCardEl(c, 'handcard');
         if ((chosen || []).includes(c.id)) d.classList.add('selected');
         // Stack downward so each card's TOP (rank/suit) remains the visible peek strip
-        d.style.top = `${i * PEEK}px`;
+        d.style.top = `${i * peek}px`;
         d.style.bottom = 'auto';
         d.dataset.z = String(i + 1);
         d.style.zIndex = String(i + 1);
         col.append(d);
       });
-      col.style.height = `${CARD_H + Math.max(0, cards.length - 1) * PEEK}px`;
+      col.style.height = `${cardH + Math.max(0, cards.length - 1) * peek}px`;
       handEl.append(col);
     });
     paint(handEl, chosen);
@@ -152,9 +161,11 @@
   function cardAtInColumn(col, clientY) {
     const cards = [...col.querySelectorAll('.handcard')];
     if (!cards.length) return null;
+    const handEl = col.parentElement;
+    const peek = parseFloat(handEl?.dataset?.peek) || layoutMetrics(handEl || col).peek;
     const top = col.getBoundingClientRect().top;
     const rel = clientY - top;
-    const idx = Math.min(cards.length - 1, Math.max(0, Math.floor(rel / PEEK)));
+    const idx = Math.min(cards.length - 1, Math.max(0, Math.floor(rel / peek)));
     return cards[idx] || null;
   }
 

@@ -21,8 +21,8 @@ assert.ok(String(src).includes('style.top'), 'stack by top so header peeks');
 assert.ok(!String(src).includes("bottom = `${i * PEEK}`"), 'must not cover tops via bottom stack');
 assert.strictEqual(typeof HS.layout, 'function');
 assert.strictEqual(typeof HS.bind, 'function');
-assert.ok(String(src).includes('cardAtInColumn') || String(src).includes('applyColumnSpan'), 'geometric column span select');
-assert.ok(String(src).includes('Math.floor(rel / PEEK)') || String(src).includes('rel / PEEK'), 'peek-index hit test');
+assert.ok(String(src).includes('layoutMetrics') || String(src).includes('--hand-peek'), 'css peek metrics');
+assert.ok(String(src).includes('Math.floor(rel / peek)') || String(src).includes('rel / peek'), 'peek-index hit test');
 
 
 

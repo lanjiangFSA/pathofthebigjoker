@@ -144,4 +144,7 @@ http
       json(res, 400, { error: e.message || '请求失败' });
     }
   })
-  .listen(PORT, () => console.log(`大怪路子：http://localhost:${PORT}`));
+  .listen(PORT, '0.0.0.0', () => {
+    console.log(`大怪路子：http://localhost:${PORT}`);
+    console.log(`局域网：http://192.168.2.16:${PORT}`);
+  });

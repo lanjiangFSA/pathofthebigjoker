@@ -205,6 +205,16 @@ HandSelect.bind($('#hand'), {
   onChange: syncActionButtons,
 });
 
+window.addEventListener('resize', () => {
+  if (!state) return;
+  HandSelect.layout($('#hand'), {
+    hand: state.hand || [],
+    trump: state.trump,
+    chosen,
+  });
+  syncActionButtons();
+});
+
 if (timerTick) clearInterval(timerTick);
 timerTick = setInterval(updateTimer, 200);
 
