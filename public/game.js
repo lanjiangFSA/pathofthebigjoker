@@ -88,14 +88,19 @@ function layoutHand(handEl) {
     el.style.left = `${left0 + col * step}px`;
     el.style.top = `${8 + row * (cardH + 14)}px`;
     el.style.zIndex = String(col + 1);
+    el.dataset.z = String(col + 1);
     el.style.margin = '0';
   });
 }
 
 function paintSelection() {
-  $('#hand').querySelectorAll('.handcard').forEach((el) => {
-    el.classList.toggle('selected', chosen.includes(el.dataset.id));
-    if (el.classList.contains('selected')) el.style.zIndex = '80';
+  const cards = [...$('#hand').querySelectorAll('.handcard')];
+  cards.forEach((el, i) => {
+    const on = chosen.includes(el.dataset.id);
+    el.classList.toggle('selected', on);
+    // Keep fan order z-index; selected only slightly above neighbors
+    const base = parseInt(el.dataset.z || String(i + 1), 10);
+    el.style.zIndex = String(on ? base + 3 : base);
   });
   const mine = state?.started && state.players[state.turn]?.id === me;
   $('#play').disabled = !mine || !chosen.length;
@@ -188,16 +193,37 @@ function render() {
     const d = document.createElement('div');
     d.className = `seat ${p.team} ${p.id === me ? 'me' : ''}`;
     const count = seatCountText(p);
-    d.innerHTML = `<b>${p.name}${p.bot ? ' · AI' : ''}${p.id === me ? '（你）' : ''}${
-      p.role === 'main' ? ' · 主攻' : p.role === 'support' && state.started ? ' · 辅助' : ''
-    }</b>${count}`;
+    const tags = [
+      p.bot ? 'AI' : null,
+      p.id === me ? '你' : null,
+      p.teammate ? '队友' : null,
+      p.role === 'main' && state.started ? '主攻' : null,
+      p.role === 'support' && state.started && p.id !== me ? '辅助' : null,
+    ]
+      .filter(Boolean)
+      .map((t) => ` · ${t}`)
+      .join('');
+    d.innerHTML = `<b>${p.name}${tags}</b>${count}`;
     $('#seats').append(d);
+  });
+
+  const logEl = $('#trickLog');
+  logEl.innerHTML = '';
+  (state.trickLog || []).forEach((t) => {
+    const row = document.createElement('div');
+    row.className = t.pass ? 'pass' : '';
+    if (t.pass) row.textContent = `${t.name}：不出`;
+    else {
+      const faces = (t.cards || []).map((c) => c.r + c.s).join(' ');
+      row.textContent = `${t.name}：${t.label} ${faces}`;
+    }
+    logEl.append(row);
   });
 
   $('#played').innerHTML = '';
   if (state.table) {
     const who = state.players.find((p) => p.id === state.table.player);
-    $('#playedBy').textContent = `${who?.name || '玩家'} 出了 ${state.table.combo.label}`;
+    $('#playedBy').textContent = `当前最大：${who?.name || '玩家'} · ${state.table.combo.label}`;
     state.table.cards.forEach((c) => $('#played').append(card(c, 'played')));
   } else {
     $('#playedBy').textContent = state.started ? '等待出牌' : '';
@@ -210,11 +236,17 @@ function render() {
   const host = state.host === me;
   $('#startbox').hidden = state.started;
   $('#start').disabled = !host;
+  const nextRound = (state.round || 0) > 0 && !state.started;
   $('#start').textContent = host
-    ? state.players.length < 6
-      ? '开始发牌（AI 补位）'
-      : '开始发牌'
+    ? nextRound
+      ? '开始下一局'
+      : state.players.length < 6
+        ? '开始发牌（AI 补位）'
+        : '开始发牌'
     : '等待房主开始';
+  $('#startbox').querySelector('p').textContent = nextRound
+    ? `上局已结束。红 ${scores.red} : ${scores.blue} 蓝`
+    : '不足 6 人时，空位将自动由 AI 补齐';
 
   const handEl = $('#hand');
   handEl.innerHTML = '';

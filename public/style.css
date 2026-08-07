@@ -40,6 +40,9 @@ header button{padding:5px 9px;font-size:11px;background:#405d7a}
 #message,#turn,#playedBy{position:relative;z-index:1;font-size:14px}
 #message{color:#e7f1c0;min-height:1.2em}
 #playedBy{color:#f9dc75;font-weight:700;margin:6px 0 2px;min-height:1.2em}
+.trick-log{position:relative;z-index:1;max-height:72px;overflow-y:auto;margin:4px 12px;padding:4px 8px;font-size:12px;color:#d5e6c8;text-align:left;background:#0c241888;border-radius:8px}
+.trick-log div{margin:2px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.trick-log .pass{color:#9fb2ca}
 #turn{position:absolute;bottom:12px;left:0;width:100%;color:#f9dc75;font-weight:bold}
 #played{position:relative;z-index:1;min-height:100px;display:flex;flex-wrap:wrap;justify-content:center;align-items:center;gap:4px;padding:4px}
 .card{position:relative;width:52px;height:74px;padding:5px 6px;background:#fffdf4;border-radius:7px;border:1px solid #c1b79e;color:#182135;box-shadow:0 2px 5px #0007;display:inline-flex;flex-direction:column;align-items:flex-start;justify-content:flex-start;gap:0;font-weight:900;font-size:18px;line-height:1.05;user-select:none;overflow:hidden;flex:0 0 auto}
@@ -53,7 +56,7 @@ header button{padding:5px 9px;font-size:11px;background:#405d7a}
 #hand{position:relative;min-height:110px;padding:8px 8px 16px;overflow:hidden;background:#122742;touch-action:none;user-select:none}
 .handcard{cursor:pointer;transition:transform .1s;will-change:transform}
 .handcard:hover{transform:translateY(-10px)}
-.handcard.selected{transform:translateY(-16px);outline:3px solid #f4c95d}
+.handcard.selected{transform:translateY(-16px);outline:3px solid #f4c95d;outline-offset:-1px}
 #startbox{position:absolute;inset:0;z-index:4;background:#10223be8;display:grid;place-content:center}
 #startbox[hidden]{display:none}
 #startbox button{font-size:20px;background:#e58c3a}
