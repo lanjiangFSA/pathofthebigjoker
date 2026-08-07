@@ -56,23 +56,28 @@ button:disabled{opacity:.45;cursor:not-allowed}
 small{color:#9fb2ca}
 #error{height:18px;color:#ff9c9c;font-size:13px}
 
-/* —— Game shell: real visible height + fixed dock —— */
+/* —— Game shell: mobile scrollable (use space under browser chrome) —— */
 body:has(#table:not([hidden])){
-  padding:0;display:block;overflow:hidden;
-  height:var(--app-height,100svh);
+  padding:0;display:block;
+  overflow-x:hidden;overflow-y:auto;
+  height:auto;min-height:100%;
+  -webkit-overflow-scrolling:touch;
 }
 body:has(#table:not([hidden])) main{
-  width:100%;max-width:none;height:100%;
+  width:100%;max-width:none;height:auto;min-height:100%;
 }
 
 #table{
-  position:fixed;inset:0;
-  width:100%;height:var(--app-height,100svh);
-  background:#0e1f2c;overflow:hidden;border:0;border-radius:0;
+  position:relative;inset:auto;
+  width:100%;
+  min-height:max(100dvh, var(--app-height, 100svh));
+  height:auto;
+  background:#0e1f2c;overflow:visible;border:0;border-radius:0;
   z-index:10;
+  display:flex;flex-direction:column;
 }
 .topbar{
-  position:absolute;left:0;right:0;top:0;z-index:20;
+  position:relative;left:auto;right:auto;top:auto;z-index:20;flex:0 0 auto;
   display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap;
   padding:calc(6px + var(--safe-t)) 10px 6px;
   padding-left:calc(10px + var(--safe-l));
@@ -91,10 +96,10 @@ body:has(#table:not([hidden])) main{
 .top-scores .mine-team{outline:1px solid #f4c95d88;border-radius:6px;padding:2px 5px}
 
 .table-arena{
-  position:absolute;
-  left:0;right:0;
-  top:var(--topbar-h,48px);
-  bottom:var(--dock-h,140px);
+  position:relative;
+  left:auto;right:auto;top:auto;bottom:auto;
+  flex:1 1 auto;
+  min-height:min(52vw,280px);
   overflow:hidden;margin:0;
 }
 .felt{
@@ -187,16 +192,17 @@ body:has(#table:not([hidden])) main{
 #startbox button{font-size:18px;background:#e58c3a;padding:12px 22px}
 #startbox p{margin:9px;color:#b9cbe0;font-size:13px}
 
-/* Fixed bottom dock: actions + hand — never overlays arena center */
+/* Bottom dock: flows in document so page can scroll to reveal tall stacks */
 #dock{
-  position:fixed;left:0;right:0;bottom:0;z-index:30;
+  position:relative;left:auto;right:auto;bottom:auto;z-index:30;
+  flex:0 0 auto;
   display:flex;flex-direction:column;
   background:#12202c;
   border-top:1px solid #ffffff18;
   padding-left:var(--safe-l);
   padding-right:var(--safe-r);
   padding-bottom:var(--safe-b);
-  max-height:42%;
+  max-height:none;
 }
 .actions{
   flex:0 0 auto;text-align:center;padding:6px 8px 4px;
@@ -212,14 +218,15 @@ body:has(#table:not([hidden])) main{
   position:relative;flex:0 1 auto;
   display:flex;flex-wrap:wrap;justify-content:center;align-content:flex-end;align-items:flex-end;
   gap:3px;width:100%;min-height:0;
-  max-height:min(30vh,200px);
-  overflow-x:hidden;overflow-y:hidden;
+  max-height:none;
+  overflow-x:hidden;overflow-y:visible;
   padding:6px 8px 8px;
   touch-action:manipulation;user-select:none;
 }
 #hand.hand-cols.hand-rows-2{
-  max-height:min(40vh,260px);
-  align-content:space-between;
+  max-height:none;
+  align-content:flex-start;
+  gap:8px 3px;
 }
 .card{
   position:relative;width:var(--hand-col-w,40px);height:var(--hand-card-h,54px);padding:2px 3px;background:#fffdf4;
@@ -264,77 +271,100 @@ body:has(#table:not([hidden])) main{
 
 footer{display:none}
 
-/* Portrait: allow taller dock when two rows */
+/* Portrait */
 @media(orientation:portrait){
-  #dock{max-height:46%}
+  .table-arena{min-height:min(58vh,420px)}
   #hand.hand-cols{
     --hand-peek:22px;--hand-card-h:50px;
-    max-height:min(28vh,180px);
   }
-  #hand.hand-cols.hand-rows-2{max-height:min(38vh,240px)}
   .seat .meta{display:none}
   .seat-slot{width:72px}
   .seat .avatar{width:26px;height:26px;font-size:10px}
 }
 
-/* Phone landscape only (not desktop windowed short height) */
+/* Phone landscape: taller stacks + scrollable page under chrome */
 @media(orientation:landscape) and (max-height:520px) and (max-width:899px){
-  .topbar{padding-top:calc(3px + var(--safe-t));padding-bottom:3px;flex-wrap:nowrap}
-  .topbar b{font-size:14px}
+  .topbar{padding-top:calc(2px + var(--safe-t));padding-bottom:2px;flex-wrap:nowrap}
+  .topbar b{font-size:13px}
   #trumpMode,#status,.top-scores small{display:none}
   .trick-log,#timerWho{display:none}
-  .clock-face{width:30px;height:30px;font-size:12px}
-  .arena-center{inset:6% 14% 8%}
-  #played{min-height:24px}
+  .clock-face{width:28px;height:28px;font-size:12px}
+  .table-arena{min-height:min(48vh,220px)}
+  .felt{inset:8% 2% 6%;border-width:5px}
+  .arena-center{inset:2% 16% 4%}
+  #message,#playedBy{font-size:10px}
+  #played{min-height:28px;max-height:42%}
   #played .card{width:26px;height:36px}
-  #dock{max-height:40%}
-  .actions{padding:3px 6px}
-  .actions button{min-width:64px;padding:5px 10px;font-size:13px}
+  .actions{padding:3px 6px 2px}
+  .actions button{min-width:64px;padding:6px 12px;font-size:13px}
   #hand.hand-cols{
-    --hand-peek:14px;--hand-card-h:40px;
-    max-height:72px;padding:3px 6px 4px;
+    /* 5-stack ≈ 48+4*13=100; allow up to ~6 peeks */
+    --hand-peek:13px;--hand-card-h:48px;
+    max-height:none;min-height:52px;padding:3px 8px 10px;
   }
-  #hand.hand-cols.hand-rows-2{max-height:110px}
   .card .card-top{min-height:12px}
-  .seat-slot{width:60px}
-  .seat .avatar{width:22px;height:22px;font-size:9px}
-  .seat .name{font-size:8px;max-width:54px}
+  .seat-slot{width:52px}
+  .seat .avatar{width:20px;height:20px;font-size:9px}
+  .seat .name{font-size:9px;max-width:48px}
   .seat .meta,.seat .pass-flag:not(.on){display:none}
+  .seat-slot[data-slot="bottom"]{display:none}
 }
 
-/* Desktop: windowed table, show footer + bottom seat */
+/* Desktop: wider/flatter stage + larger type */
 @media(min-width:900px) and (min-height:700px){
   body:has(#table:not([hidden])){
-    padding:8px;display:grid;place-items:center;height:auto;overflow:auto;
+    padding:10px;display:grid;place-items:center;height:auto;overflow:auto;
   }
-  body:has(#table:not([hidden])) main{width:min(1180px,98vw);height:auto}
+  body:has(#table:not([hidden])) main{width:min(1400px,98vw);height:auto}
   #table{
     position:relative;inset:auto;
-    width:100%;height:min(96svh,900px);
+    width:100%;height:min(72svh,680px);
     border-radius:16px;border:1px solid #ffffff22;overflow:hidden;
   }
-  .topbar{position:relative;padding:10px 14px}
+  .topbar{position:relative;padding:10px 16px}
+  .topbar b{font-size:20px}
+  #trumpMode,#status{font-size:14px}
+  .top-scores{font-size:15px}
+  .redscore b,.bluescore b{font-size:22px}
+  .top-scores small{font-size:11px}
   .table-arena{
     position:relative;top:auto;bottom:auto;left:auto;right:auto;
     flex:1;height:calc(100% - var(--topbar-h) - var(--dock-h));
-    min-height:280px;
+    min-height:220px;
   }
+  .felt{inset:4% 3%;border-width:6px}
+  .arena-center{inset:6% 12% 8%}
+  #message{font-size:15px}
+  #playedBy{font-size:15px}
+  .trick-log{font-size:12px;max-height:52px;width:min(420px,90%)}
+  .clock-face{width:52px;height:52px;font-size:22px}
+  #timerWho{font-size:12px}
+  .seat{font-size:13px}
+  .seat .name{font-size:14px;max-width:110px}
+  .seat .meta,.seat .pass-flag{font-size:11px}
+  .seat .avatar{width:40px;height:40px;font-size:14px}
+  .seat-slot{width:120px}
   #table{display:flex;flex-direction:column}
   #dock{
     position:relative;left:auto;right:auto;bottom:auto;
     max-height:none;flex:0 0 auto;
     padding-left:0;padding-right:0;padding-bottom:0;
   }
+  .actions{padding:8px}
+  .actions button{min-width:100px;padding:11px 16px;font-size:16px}
   #hand.hand-cols{
-    --hand-peek:30px;--hand-card-h:72px;--hand-col-w:52px;
-    max-height:260px;justify-content:center;touch-action:none;
-    padding:10px;overflow-x:hidden;
+    --hand-peek:28px;--hand-card-h:70px;--hand-col-w:48px;
+    max-height:220px;justify-content:center;touch-action:none;
+    padding:8px 12px;overflow-x:hidden;overflow-y:hidden;
   }
-  #hand.hand-cols.hand-rows-2{max-height:320px}
-  .card{height:var(--hand-card-h);font-size:clamp(12px,calc(var(--hand-col-w) * 0.3),16px)}
+  #hand.hand-cols.hand-rows-2{max-height:280px}
+  .card{height:var(--hand-card-h);font-size:clamp(13px,calc(var(--hand-col-w) * 0.34),17px)}
+  #played .card{width:40px;height:56px;font-size:14px}
+  #played .card .rank{font-size:14px}
+  #played .card .suit{font-size:13px}
   .seat-slot[data-slot="bottom"]{display:block;bottom:4px;left:50%;transform:translateX(-50%)}
   footer{
-    display:block;font-size:10px;color:#a6bdd3;padding:6px 10px;
+    display:block;font-size:12px;color:#a6bdd3;padding:8px 12px;
     text-align:center;background:#0a1520;
   }
 }

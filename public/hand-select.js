@@ -20,6 +20,10 @@
   const WIDE_AVAIL = 640;
 
   function layoutMetrics(handEl) {
+    // Read stylesheet defaults only — strip prior inline writes to avoid
+    // re-scaling the same vars on every SSE/render layout pass.
+    handEl.style.removeProperty('--hand-peek');
+    handEl.style.removeProperty('--hand-card-h');
     const cs = getComputedStyle(handEl);
     const peek = parseFloat(cs.getPropertyValue('--hand-peek')) || PEEK;
     const cardH = parseFloat(cs.getPropertyValue('--hand-card-h')) || CARD_H;
@@ -27,6 +31,14 @@
   }
 
   function maxColWidth(availWidth) {
+    // Phone landscape is wide but short — keep mobile column ceiling.
+    if (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(orientation: landscape) and (max-height: 520px) and (max-width: 899px)').matches
+    ) {
+      return MAX_COL_W;
+    }
     return availWidth >= WIDE_AVAIL ? MAX_COL_W_WIDE : MAX_COL_W;
   }
 
@@ -169,10 +181,11 @@
       320;
     const avail = Math.max(0, rawW - padX);
     const fit = fitColumns(order.length, avail);
-    // Scale from mobile reference so wide cols grow; cap growth slightly.
-    const scale = Math.min(1.25, Math.max(0.55, fit.colW / MAX_COL_W));
-    const peek = Math.max(12, Math.round(base.peek * scale));
-    const cardH = Math.max(32, Math.round(base.cardH * scale));
+    // Width may grow on desktop; height/peek only shrink when columns are narrow
+    // (never scale above CSS base — that made PC cards look too tall).
+    const hScale = Math.min(1, Math.max(0.55, fit.colW / MAX_COL_W));
+    const peek = Math.max(12, Math.round(base.peek * hScale));
+    const cardH = Math.max(32, Math.round(base.cardH * hScale));
     handEl.dataset.peek = String(peek);
     handEl.dataset.rows = String(fit.rows);
     handEl.classList.toggle('hand-rows-2', fit.rows === 2);

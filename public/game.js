@@ -17,9 +17,11 @@ async function api(url, data) {
   return x;
 }
 
-/** Real visible height + measured chrome (H5 visualViewport pattern). */
+/** Layout height prefers larger of visual/layout viewport so page can scroll under chrome. */
 function syncAppShell() {
-  const h = Math.round(window.visualViewport?.height || window.innerHeight || 0);
+  const vv = Math.round(window.visualViewport?.height || 0);
+  const ih = Math.round(window.innerHeight || 0);
+  const h = Math.max(vv, ih);
   if (h > 0) document.documentElement.style.setProperty('--app-height', `${h}px`);
   const dock = document.getElementById('dock');
   const top = document.querySelector('#table .topbar');

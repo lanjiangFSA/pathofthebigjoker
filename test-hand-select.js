@@ -30,6 +30,9 @@ assert.ok(HS.fitColumns(16, 900).rows === 1, 'wide desktop stays one row');
 assert.ok(HS.fitColumns(16, 900).colW > 40, 'wide desktop grows columns past mobile max');
 assert.ok(String(src).includes('hand-rows-2'), 'two-row class toggle');
 assert.ok(String(src).includes('MAX_COL_W_WIDE'), 'wide max constant');
+assert.ok(String(src).includes("removeProperty('--hand-peek')"), 'strip inline peek before metrics');
+assert.ok(String(src).includes("removeProperty('--hand-card-h')"), 'strip inline cardH before metrics');
+assert.ok(String(src).includes('Math.min(1,') || String(src).includes('hScale'), 'height scale does not grow above CSS base');
 
 
 
