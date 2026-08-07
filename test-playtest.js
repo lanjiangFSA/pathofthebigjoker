@@ -109,22 +109,27 @@ function assert(cond, msg) {
         assert(text.includes('trumpRules'), 'lobby has trump checkbox');
         assert(text.includes('playedBy'), 'board has playedBy');
         assert(text.includes('redScore'), 'scoreboard uses scores');
+        assert(text.includes('table-arena'), 'table arena');
+        assert(text.includes('turn-timer'), 'turn timer');
+        assert(text.includes('trickLog'), 'trickLog in html');
       }
       if (f === '/game.js') {
         assert(text.includes('count <= 10'), 'seat count gate');
         assert(text.includes('playedBy'), 'playedBy render');
-        assert(text.includes('layoutHand'), 'fan layout');
+        assert(text.includes('rank-col') || text.includes('layoutRankColumns'), 'rank columns');
         assert(text.includes('bindHandDrag') || text.includes('onpointermove'), 'drag select');
         assert(text.includes('scores'), 'renders scores');
         assert(text.includes('trickLog') || text.includes('trick-log'), 'trick history');
         assert(text.includes('队友') || text.includes('teammate'), 'teammate label');
+        assert(text.includes('turnDeadline') || text.includes('updateTimer'), 'timer ui');
+        assert(text.includes('REL_SLOTS') || text.includes('seat-slot'), 'relative seats');
       }
       if (f === '/style.css') {
         assert(text.includes('touch-action:none') || text.includes('touch-action: none'), 'hand drag css');
         assert(text.includes('trick-log'), 'trick log css');
-      }
-      if (f === '/') {
-        assert(text.includes('trickLog'), 'trickLog in html');
+        assert(text.includes('table-arena'), 'arena css');
+        assert(text.includes('rank-col'), 'rank-col css');
+        assert(text.includes('turn-timer'), 'timer css');
       }
     }
     console.log('OK assets and UI markers');

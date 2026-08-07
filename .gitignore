@@ -8,6 +8,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 .vscode/
+release.md
 
 # Local deploy and GitHub SSH credentials (never commit)
 .ssh/

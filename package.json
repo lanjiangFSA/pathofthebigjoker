@@ -1,11 +1,11 @@
 {
   "name": "big-monster-road",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "大怪路子 - browser co-op monster survival game",
   "scripts": {
     "start": "node server.js",
-    "test": "node test-rules.js && node test-collab.js && node test-ui-fixes.js && node test-v04.js"
+    "test": "node test-rules.js && node test-collab.js && node test-ui-fixes.js && node test-v04.js && node test-v05.js"
   },
   "engines": { "node": ">=18" }
 }
