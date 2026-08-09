@@ -9,15 +9,14 @@
   <section id="lobby" class="panel">
     <p class="tag">上海扑克 · 6 人对抗</p>
     <h1>大怪路子</h1>
-    <p>三副牌 · 两队交叉落座 · 升级玩法</p>
+    <p>三副牌 · 两队交叉落座 · 六副一赛段</p>
     <input id="name" maxlength="12" placeholder="你的昵称" value="牌友">
-    <label class="opt"><input type="checkbox" id="trumpRules"> 启用将牌升级（默认关闭，将牌固定为 2）</label>
     <button id="create">创建牌桌</button>
     <div class="join">
       <input id="code" maxlength="6" placeholder="输入 6 位房间号">
       <button id="join">加入</button>
     </div>
-    <small>创建后将房间号发给朋友；空位会由 AI 补齐。将牌规则仅创建时可设置。建议横屏游玩。</small>
+    <small>创建后将房间号发给朋友；空位会由 AI 补齐。刷新可自动回到原房间。建议横屏游玩。</small>
     <p id="error"></p>
   </section>
   <section id="table" hidden>
@@ -25,6 +24,7 @@
       <div class="top-left">
         <span class="tag">房间</span><b id="room"></b>
         <button type="button" id="copy">复制</button>
+        <button type="button" id="leave">退出</button>
         <div class="audio-menu">
           <button type="button" id="audioMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="audioMenu">声音 ▾</button>
           <div id="audioMenu" class="audio-menu-panel" hidden>
@@ -40,14 +40,12 @@
         </div>
       </div>
       <div class="top-mid">
-        将牌 <b id="trump">2</b>
-        <span id="trumpMode"></span>
         <span id="status"></span>
       </div>
       <div class="top-scores">
-        <span class="redscore" id="redScoreWrap">红 <b id="redScore">0</b><small id="redLevel"></small></span>
+        <span class="redscore" id="redScoreWrap">红 <b id="redScore">0</b></span>
         <span class="sep">:</span>
-        <span class="bluescore" id="blueScoreWrap">蓝 <b id="blueScore">0</b><small id="blueLevel"></small></span>
+        <span class="bluescore" id="blueScoreWrap">蓝 <b id="blueScore">0</b></span>
       </div>
     </header>
     <div id="table-arena" class="table-arena">
@@ -60,28 +58,25 @@
       <div class="seat-slot" data-slot="rightL"></div>
       <div class="seat-slot" data-slot="bottom"></div>
       <div class="arena-center">
-        <div id="turn-timer" class="turn-timer" hidden>
-          <div class="clock-face"><span id="timerSec">15</span></div>
-          <small id="timerWho"></small>
-        </div>
         <div id="message"></div>
         <div id="playedBy"></div>
         <div id="played"></div>
         <div id="trickLog" class="trick-log"></div>
       </div>
-      <div id="startbox">
+      <div id="startbox" class="docked">
         <button id="start">开始发牌</button>
-        <p>不足 6 人时，空位将自动由 AI 补齐</p>
+        <p>座位见牌桌；不足 6 人时开始后 AI 补齐</p>
       </div>
     </div>
     <div id="dock">
       <div class="actions">
+        <div id="self-timer" class="self-timer" hidden><div class="clock-face">0</div></div>
         <button id="pass">不要</button>
         <button id="play">出牌</button>
       </div>
       <div id="hand" class="hand-cols"></div>
     </div>
-    <footer>规则：单张、对子、三张、五路（杂顺／同花／三带两／四带一／同花顺／五同）。手牌按点数竖列；点选单张，拖选多张，双击整列。</footer>
+    <footer>规则：单张、对子、三张、五路。手牌按点数竖列；点选单张，拖选多张，双击整列。六副一赛段后重新分组。</footer>
   </section>
 </main>
 <script src="hand-select.js"></script>

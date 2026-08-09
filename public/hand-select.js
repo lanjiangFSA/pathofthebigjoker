@@ -75,18 +75,6 @@
     return i < 0 ? 0 : 100 - i;
   }
 
-  const JOKER_SVG =
-    '<svg class="joker-icon" viewBox="0 0 32 32" aria-hidden="true">' +
-    '<circle cx="16" cy="18" r="9" fill="currentColor" opacity=".12"/>' +
-    '<path d="M8 12c0-6 4-9 8-9s8 3 8 9" fill="none" stroke="currentColor" stroke-width="2"/>' +
-    '<circle cx="10" cy="8" r="2.2" fill="var(--joker-a,#e23)"/>' +
-    '<circle cx="16" cy="5" r="2.2" fill="var(--joker-b,#fc3)"/>' +
-    '<circle cx="22" cy="8" r="2.2" fill="var(--joker-c,#36c)"/>' +
-    '<circle cx="12.5" cy="17" r="1.4" fill="currentColor"/>' +
-    '<circle cx="19.5" cy="17" r="1.4" fill="currentColor"/>' +
-    '<path d="M12 22c1.5 2 6.5 2 8 0" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>' +
-    '</svg>';
-
   function makeCardEl(c, cls) {
     const d = document.createElement('div');
     const isBig = c.r === '大怪';
@@ -105,7 +93,7 @@
     d.dataset.id = c.id || '';
     d.dataset.rank = c.r || '';
     if (isBig || isSmall) {
-      d.innerHTML = `<div class="card-top">${JOKER_SVG}<span class="joker-label">${isBig ? '大' : '小'}</span></div>`;
+      d.innerHTML = `<div class="card-top joker-letters" aria-label="${isBig ? '大怪' : '小怪'}"><span>J</span><span>O</span><span>K</span><span>E</span><span>R</span></div>`;
     } else {
       d.innerHTML = `<div class="card-top"><span class="rank">${c.r}</span><span class="suit">${c.s}</span></div>`;
     }

@@ -132,11 +132,12 @@ body:has(#table:not([hidden])) main{
 .seat-slot[data-slot="leftL"]{top:50%;left:0}
 .seat-slot[data-slot="rightU"]{top:24%;right:0}
 .seat-slot[data-slot="rightL"]{top:50%;right:0}
-.seat-slot[data-slot="bottom"]{display:none} /* self hand is in dock */
+.seat-slot[data-slot="bottom"]{bottom:2px;left:50%;transform:translateX(-50%);display:block}
+.seat-slot[data-slot="bottom"] .seat .seat-plays{max-width:140px}
 
 .seat{
   display:inline-flex;flex-direction:column;align-items:center;gap:1px;
-  color:#c5d8e8;font-size:10px;pointer-events:auto;
+  color:#c5d8e8;font-size:10px;pointer-events:auto;position:relative;
 }
 .seat .avatar{
   width:30px;height:30px;border-radius:50%;
@@ -149,9 +150,11 @@ body:has(#table:not([hidden])) main{
 .seat.me .avatar{border-color:#f4c95d;box-shadow:0 0 0 2px #f4c95d44}
 .seat.active .avatar{
   animation:pulse 1.2s ease-in-out infinite;
-  border-color:#ffe08a;box-shadow:0 0 12px #f4c95daa;
+  border-color:#ffe08a;box-shadow:0 0 14px #f4c95dee,0 0 0 3px #ffe08a88;
 }
-@keyframes pulse{50%{transform:scale(1.08)}}
+.seat.active .name{color:#ffe08a;font-weight:900}
+.seat.banker .avatar{outline:2px solid #ffb84d}
+@keyframes pulse{50%{transform:scale(1.1)}}
 .seat .name{font-weight:700;color:#f4f8ff;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .seat.me .name{color:#ffdb70}
 .seat .meta{font-size:9px;color:#9fb2ca;min-height:0}
@@ -160,11 +163,28 @@ body:has(#table:not([hidden])) main{
   border-radius:8px;background:#e58c3a;color:#fff;font-size:9px;font-weight:900;
   display:grid;place-items:center;
 }
+.seat .badge-banker{
+  position:absolute;bottom:-5px;left:-6px;font-size:8px;font-weight:900;
+  background:#c45c26;color:#fff;border-radius:4px;padding:0 3px;line-height:1.2;
+}
 .seat .pass-flag{
   margin-top:1px;padding:0 5px;border-radius:4px;font-size:9px;font-weight:900;
   background:transparent;color:transparent;border:0;min-height:0;line-height:1.2;
 }
 .seat .pass-flag.on{background:#435675;color:#e8eef6;border:1px solid #ffffff22}
+.seat-timer{position:absolute;top:-6px;right:-8px;z-index:6}
+.seat-timer .clock-face{width:26px;height:26px;font-size:11px;border-width:2px}
+.seat-plays{
+  display:flex;flex-direction:column;align-items:center;gap:2px;margin-top:2px;
+  min-height:0;max-width:110px;pointer-events:none;
+}
+.seat-play-stack{display:flex;flex-wrap:wrap;justify-content:center;gap:1px;position:relative}
+.seat-play-stack .card.seat-card{
+  width:22px;height:30px;font-size:8px;border-radius:3px;box-shadow:0 1px 3px #0008;
+}
+.kick-btn{
+  margin-top:2px;padding:1px 6px;font-size:10px;background:#8a3a3a;border-radius:4px;pointer-events:auto;
+}
 
 .arena-center{
   position:absolute;inset:10% 10% 12%;z-index:2;
@@ -186,7 +206,6 @@ body:has(#table:not([hidden])) main{
 .trick-log div{margin:1px 0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .trick-log .pass{color:#9fb2ca}
 
-.turn-timer{display:flex;flex-direction:column;align-items:center;margin-bottom:2px;flex-shrink:0}
 .clock-face{
   width:40px;height:40px;border-radius:50%;
   background:radial-gradient(circle at 35% 30%,#fff8e8,#e8c56a 55%,#b8860b);
@@ -194,15 +213,21 @@ body:has(#table:not([hidden])) main{
   display:grid;place-items:center;font-weight:900;font-size:16px;color:#2a1a08;
 }
 .clock-face.warn{background:radial-gradient(circle at 35% 30%,#ffe0d0,#e07050 60%,#8a3020);color:#fff}
-#timerWho{font-size:9px;color:#f9dc75;margin-top:1px}
+.self-timer{display:flex;align-items:center}
+.self-timer .clock-face{width:32px;height:32px;font-size:13px;border-width:2px}
 
 #startbox{
-  position:absolute;inset:0;z-index:5;background:#0e1f2ce8;
-  display:grid;place-content:center;text-align:center;padding:12px;
+  position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
+  z-index:5;background:#0e1f2ccc;border:1px solid #ffffff22;border-radius:10px;
+  display:flex;flex-direction:column;align-items:center;text-align:center;
+  padding:8px 14px;pointer-events:auto;max-width:90%;
 }
+#startbox.docked{/* seats stay visible above */}
 #startbox[hidden]{display:none}
-#startbox button{font-size:18px;background:#e58c3a;padding:12px 22px}
-#startbox p{margin:9px;color:#b9cbe0;font-size:13px}
+#startbox button{font-size:16px;background:#e58c3a;padding:10px 18px}
+#startbox p{margin:6px 0 0;color:#b9cbe0;font-size:12px}
+#leave{padding:4px 8px;font-size:11px;background:#8a3a3a}
+#play.ready{box-shadow:0 0 0 2px #ffe08a;filter:brightness(1.08)}
 
 /* Bottom dock: flows in document so page can scroll to reveal tall stacks */
 #dock{
@@ -253,22 +278,24 @@ body:has(#table:not([hidden])) main{
 .card .suit{font-size:0.9em;font-weight:700}
 .card.red{color:#d43743}
 .card.joker{font-size:11px}
-.card .joker-icon{width:14px;height:14px;flex:none;display:block}
-.card .joker-label{font-size:9px;font-weight:900;line-height:1}
+.card .joker-letters{
+  display:flex;flex-direction:row;align-items:center;justify-content:center;
+  gap:0;letter-spacing:-0.4px;font-weight:900;font-size:7px;line-height:1;width:100%;
+}
 .card.joker-big{
-  color:#b81c1c;--joker-a:#e53935;--joker-b:#ffca28;--joker-c:#1e88e5;
+  color:#c62828;
   background:linear-gradient(160deg,#fff5f5 0%,#ffe8e0 55%,#fffdf4 100%);border-color:#e08a7a;
 }
-.card.joker-big .joker-icon{color:#c62828}
+.card.joker-big .joker-letters{color:#c62828}
 .card.joker-small{
-  color:#222;--joker-a:#111;--joker-b:#666;--joker-c:#333;
+  color:#222;
   background:linear-gradient(160deg,#f3f3f3 0%,#e8e8e8 55%,#fafafa 100%);border-color:#9a9a9a;
 }
-.card.joker-small .joker-icon{color:#111;filter:grayscale(1)}
+.card.joker-small .joker-letters{color:#222}
 #played .card{margin:0;width:32px;height:44px;font-size:11px}
 #played .card .rank{font-size:11px}
 #played .card .suit{font-size:10px}
-#played .card .joker-icon{width:12px;height:12px}
+#played .card .joker-letters{font-size:6px}
 
 .rank-col{position:relative;flex:0 0 auto;width:var(--hand-col-w,40px);min-height:var(--hand-card-h)}
 .rank-col .handcard{
@@ -276,9 +303,11 @@ body:has(#table:not([hidden])) main{
   transition:transform .08s, outline-color .08s, box-shadow .08s;
 }
 .rank-col .handcard .card-top{pointer-events:none}
-.rank-col .handcard.selected{
-  outline:2px solid #f4c95d;outline-offset:-1px;
-  transform:translateY(-5px);box-shadow:0 4px 10px #0007;
+.rank-col .handcard.selected,
+#hand .handcard.selected{
+  outline:2px solid #ffe08a;outline-offset:0;
+  box-shadow:0 0 0 2px #c45c26,0 4px 10px #000a;
+  transform:translateY(-10px) scale(1.04);z-index:20;filter:brightness(1.12);
 }
 
 footer{display:none}
