@@ -34,6 +34,19 @@ body{
     radial-gradient(ellipse at 50% 0%,#2a5a4a 0%,transparent 55%),
     linear-gradient(165deg,#132a38 0%,#0c1a24 45%,#152018 100%);
   display:grid;place-items:center;padding:8px;
+  overflow:hidden;
+}
+/* Lobby: hide table hard — author #table{display:flex} otherwise overrides [hidden] */
+#lobby[hidden],#table[hidden]{display:none!important}
+body:not(:has(#table:not([hidden]))){
+  overflow:hidden;
+  height:100%;
+  max-height:100svh;
+}
+body:not(:has(#table:not([hidden]))) main{
+  width:min(1180px,98vw);
+  max-height:100%;
+  overflow:auto;
 }
 main{width:min(1180px,98vw)}
 .panel{
@@ -213,9 +226,6 @@ body:has(#table:not([hidden])) main{
   display:grid;place-items:center;font-weight:900;font-size:16px;color:#2a1a08;
 }
 .clock-face.warn{background:radial-gradient(circle at 35% 30%,#ffe0d0,#e07050 60%,#8a3020);color:#fff}
-.self-timer{display:flex;align-items:center}
-.self-timer .clock-face{width:32px;height:32px;font-size:13px;border-width:2px}
-
 #startbox{
   position:absolute;left:50%;bottom:8px;transform:translateX(-50%);
   z-index:5;background:#0e1f2ccc;border:1px solid #ffffff22;border-radius:10px;
@@ -277,11 +287,12 @@ body:has(#table:not([hidden])) main{
 .card .rank{font-size:inherit;font-weight:900}
 .card .suit{font-size:0.9em;font-weight:700}
 .card.red{color:#d43743}
-.card.joker{font-size:11px}
 .card .joker-letters{
-  display:flex;flex-direction:row;align-items:center;justify-content:center;
-  gap:0;letter-spacing:-0.4px;font-weight:900;font-size:7px;line-height:1;width:100%;
+  display:flex;flex-direction:row;align-items:flex-start;justify-content:flex-start;
+  gap:0;letter-spacing:-0.6px;font-weight:900;line-height:1;width:100%;
 }
+.card .joker-letters .joker-j{font-size:inherit;font-weight:900;line-height:1}
+.card .joker-letters .joker-rest{font-size:0.55em;font-weight:800;line-height:1.15;align-self:flex-start;margin-top:0.12em}
 .card.joker-big{
   color:#c62828;
   background:linear-gradient(160deg,#fff5f5 0%,#ffe8e0 55%,#fffdf4 100%);border-color:#e08a7a;
@@ -295,7 +306,7 @@ body:has(#table:not([hidden])) main{
 #played .card{margin:0;width:32px;height:44px;font-size:11px}
 #played .card .rank{font-size:11px}
 #played .card .suit{font-size:10px}
-#played .card .joker-letters{font-size:6px}
+#played .card .joker-letters .joker-rest{font-size:0.55em}
 
 .rank-col{position:relative;flex:0 0 auto;width:var(--hand-col-w,40px);min-height:var(--hand-card-h)}
 .rank-col .handcard{
@@ -348,7 +359,8 @@ footer{display:none}
   .seat .avatar{width:20px;height:20px;font-size:9px}
   .seat .name{font-size:9px;max-width:48px}
   .seat .meta,.seat .pass-flag:not(.on){display:none}
-  .seat-slot[data-slot="bottom"]{display:none}
+  .seat-slot[data-slot="bottom"]{display:block;bottom:2px;left:50%;transform:translateX(-50%)}
+  .seat-slot[data-slot="bottom"] .seat .name{max-width:56px}
 }
 
 /* Desktop: wider/flatter stage + larger type */

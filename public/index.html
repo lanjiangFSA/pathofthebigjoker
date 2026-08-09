@@ -10,7 +10,7 @@
     <p class="tag">上海扑克 · 6 人对抗</p>
     <h1>大怪路子</h1>
     <p>三副牌 · 两队交叉落座 · 六副一赛段</p>
-    <input id="name" maxlength="12" placeholder="你的昵称" value="牌友">
+    <input id="name" maxlength="12" placeholder="你的昵称" value="" autocomplete="nickname">
     <button id="create">创建牌桌</button>
     <div class="join">
       <input id="code" maxlength="6" placeholder="输入 6 位房间号">
@@ -29,12 +29,12 @@
           <button type="button" id="audioMenuBtn" aria-expanded="false" aria-haspopup="true" aria-controls="audioMenu">声音 ▾</button>
           <div id="audioMenu" class="audio-menu-panel" hidden>
             <label class="vol-row">音乐
-              <input type="range" id="volMusic" min="0" max="100" value="30" step="1">
-              <span id="volMusicVal">30</span>
+              <input type="range" id="volMusic" min="0" max="100" value="10" step="1">
+              <span id="volMusicVal">10</span>
             </label>
             <label class="vol-row">音效
-              <input type="range" id="volSfx" min="0" max="100" value="100" step="1">
-              <span id="volSfxVal">100</span>
+              <input type="range" id="volSfx" min="0" max="100" value="30" step="1">
+              <span id="volSfxVal">30</span>
             </label>
           </div>
         </div>
@@ -59,9 +59,6 @@
       <div class="seat-slot" data-slot="bottom"></div>
       <div class="arena-center">
         <div id="message"></div>
-        <div id="playedBy"></div>
-        <div id="played"></div>
-        <div id="trickLog" class="trick-log"></div>
       </div>
       <div id="startbox" class="docked">
         <button id="start">开始发牌</button>
@@ -70,7 +67,6 @@
     </div>
     <div id="dock">
       <div class="actions">
-        <div id="self-timer" class="self-timer" hidden><div class="clock-face">0</div></div>
         <button id="pass">不要</button>
         <button id="play">出牌</button>
       </div>

@@ -16,7 +16,20 @@ const {
   checkTimeout,
 } = require('./logic');
 
+const os = require('os');
 const PORT = process.env.PORT || 3000;
+
+function lanUrls(port) {
+  const urls = [];
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    for (const info of list || []) {
+      if (info.family !== 'IPv4' || info.internal) continue;
+      urls.push(`http://${info.address}:${port}`);
+    }
+  }
+  return urls;
+}
 const rooms = new Map();
 const streams = new Map();
 const pub = path.join(__dirname, 'public');
@@ -222,4 +235,7 @@ http
   })
   .listen(PORT, '0.0.0.0', () => {
     console.log(`大怪路子：http://localhost:${PORT}`);
+    const lan = lanUrls(PORT);
+    if (lan.length) console.log(`局域网：${lan.join('  ')}`);
+    else console.log('局域网：未检测到 IPv4，请确认网卡已联网');
   });

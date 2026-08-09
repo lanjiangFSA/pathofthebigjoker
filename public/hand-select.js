@@ -93,7 +93,7 @@
     d.dataset.id = c.id || '';
     d.dataset.rank = c.r || '';
     if (isBig || isSmall) {
-      d.innerHTML = `<div class="card-top joker-letters" aria-label="${isBig ? '大怪' : '小怪'}"><span>J</span><span>O</span><span>K</span><span>E</span><span>R</span></div>`;
+      d.innerHTML = `<div class="card-top joker-letters" aria-label="${isBig ? '大怪' : '小怪'}"><span class="joker-j">J</span><span class="joker-rest">O</span><span class="joker-rest">K</span><span class="joker-rest">E</span><span class="joker-rest">R</span></div>`;
     } else {
       d.innerHTML = `<div class="card-top"><span class="rank">${c.r}</span><span class="suit">${c.s}</span></div>`;
     }

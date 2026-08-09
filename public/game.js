@@ -5,6 +5,7 @@ let audioBootstrapped = false;
 let joining = false;
 let streamSrc = null;
 const SESSION_KEY = 'dglz-session-v06';
+const NICK_KEY = 'dglz-nickname-v06';
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => [...document.querySelectorAll(s)];
 
@@ -20,10 +21,39 @@ function applyAudio(prev, next, opts) {
 /** Relative seat 0=self → slot (clockwise from bottom). */
 const REL_SLOTS_6 = ['bottom', 'rightL', 'rightU', 'topR', 'topL', 'leftU'];
 
+function saveNickname(name) {
+  const n = String(name || '').trim().slice(0, 12);
+  if (!n) return;
+  try {
+    localStorage.setItem(NICK_KEY, n);
+  } catch (_) {}
+}
+
+function loadNickname() {
+  try {
+    return String(localStorage.getItem(NICK_KEY) || '').trim().slice(0, 12);
+  } catch {
+    return '';
+  }
+}
+
+function randomGuestName() {
+  const letter = String.fromCharCode(65 + Math.floor(Math.random() * 26));
+  return `牌友${letter}`;
+}
+
+function initLobbyName() {
+  const input = $('#name');
+  if (!input) return;
+  const saved = loadNickname();
+  input.value = saved || randomGuestName();
+}
+
 function saveSession(code, id, name) {
   try {
     localStorage.setItem(SESSION_KEY, JSON.stringify({ code, id, name }));
   } catch (_) {}
+  saveNickname(name);
 }
 
 function loadSession() {
@@ -127,7 +157,9 @@ async function enterRoom(join) {
   $('#join').disabled = true;
   try {
     unlockAudio();
-    const name = $('#name').value;
+    const name = ($('#name').value || '').trim().slice(0, 12) || randomGuestName();
+    $('#name').value = name;
+    saveNickname(name);
     const sess = loadSession();
     enter(
       join
@@ -151,7 +183,7 @@ async function tryRestoreSession() {
   const sess = loadSession();
   if (!sess?.code || !sess?.id) return;
   try {
-    if ($('#name') && sess.name) $('#name').value = sess.name;
+    if ($('#name')) $('#name').value = sess.name || loadNickname() || $('#name').value;
     const x = await api('/api/rejoin', { code: sess.code, id: sess.id, name: sess.name });
     enter(x);
   } catch {
@@ -159,6 +191,8 @@ async function tryRestoreSession() {
   }
 }
 
+initLobbyName();
+$('#name')?.addEventListener('change', () => saveNickname($('#name').value));
 $('#create').onclick = () => enterRoom(false);
 $('#join').onclick = () => enterRoom(true);
 $('#code').oninput = (e) => (e.target.value = e.target.value.toUpperCase());
@@ -195,12 +229,12 @@ function activeTrickEntries() {
   return state.lastTrickShow || [];
 }
 
-function playsByPlayer() {
+/** Latest non-pass play per player (covers previous hand at that seat). */
+function latestPlayByPlayer() {
   const map = new Map();
-  activeTrickEntries().forEach((t, idx) => {
-    if (!t.playerId) return;
-    if (!map.has(t.playerId)) map.set(t.playerId, []);
-    map.get(t.playerId).push({ ...t, _i: idx });
+  activeTrickEntries().forEach((t) => {
+    if (!t.playerId || t.pass || !t.cards?.length) return;
+    map.set(t.playerId, t);
   });
   return map;
 }
@@ -265,18 +299,6 @@ function updateTimer() {
   } else {
     updateTimer._zeroSince = 0;
   }
-
-  // Self dock timer when it's my turn (bottom seat hidden)
-  const selfTimer = $('#self-timer');
-  if (selfTimer) {
-    const mySeat = mySeatIndex();
-    const show = state.turn === mySeat;
-    selfTimer.hidden = !show;
-    if (show) {
-      selfTimer.querySelector('.clock-face').textContent = String(sec);
-      selfTimer.querySelector('.clock-face').classList.toggle('warn', sec <= 5);
-    }
-  }
 }
 
 function renderSeats() {
@@ -287,7 +309,7 @@ function renderSeats() {
   const mine = mySeatIndex();
   const log = activeTrickEntries();
   const passed = passSetFromLog(log);
-  const byPlayer = playsByPlayer();
+  const byPlayer = latestPlayByPlayer();
   const myTeam = state.players[mine]?.team;
   const host = state.host === me;
 
@@ -316,15 +338,10 @@ function renderSeats() {
         ? `<button type="button" class="kick-btn" data-kick="${p.id}">踢</button>`
         : '';
 
-    const plays = byPlayer.get(p.id) || [];
-    const playHtml = plays
-      .filter((t) => !t.pass && t.cards?.length)
-      .map((t, i) => {
-        const z = 10 + (t._i || i);
-        const faces = t.cards.map((c) => card(c, 'seat-card').outerHTML).join('');
-        return `<div class="seat-play-stack" style="z-index:${z}">${faces}</div>`;
-      })
-      .join('');
+    const latest = byPlayer.get(p.id);
+    const playHtml = latest
+      ? `<div class="seat-play-stack">${latest.cards.map((c) => card(c, 'seat-card').outerHTML).join('')}</div>`
+      : '';
 
     d.innerHTML = `
       <div class="seat-timer" data-seat="${seat}" hidden><div class="clock-face">0</div></div>
@@ -342,19 +359,6 @@ function renderSeats() {
   $('#blueScoreWrap').classList.toggle('mine-team', myTeam === 'blue');
 }
 
-function renderCenterTable() {
-  const show = state.table || state.lastTable;
-  $('#played').innerHTML = '';
-  if (show) {
-    const who = state.players.find((p) => p.id === show.player);
-    const stale = !state.table && state.lastTable;
-    $('#playedBy').textContent = `${stale ? '上轮最大' : '当前最大'}：${who?.name || '玩家'} · ${show.combo.label}`;
-    show.cards.forEach((c) => $('#played').append(card(c, 'played')));
-  } else {
-    $('#playedBy').textContent = state.started ? '等待出牌' : '';
-  }
-}
-
 function render() {
   if (!state) return;
   const scores = state.scores || { red: 0, blue: 0 };
@@ -369,20 +373,6 @@ function render() {
   $('#blueScore').textContent = scores.blue;
 
   renderSeats();
-  renderCenterTable();
-
-  const logEl = $('#trickLog');
-  logEl.innerHTML = '';
-  activeTrickEntries().forEach((t) => {
-    const row = document.createElement('div');
-    row.className = t.pass ? 'pass' : '';
-    if (t.pass) row.textContent = `${t.name}：不出`;
-    else {
-      const faces = (t.cards || []).map((c) => c.r + c.s).join(' ');
-      row.textContent = `${t.name}：${t.label} ${faces}`;
-    }
-    logEl.append(row);
-  });
 
   const host = state.host === me;
   const waiting = !state.started;
