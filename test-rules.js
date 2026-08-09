@@ -141,36 +141,36 @@ check('AI does not beat teammate lightly', () => {
   assert.ok(r.passes === beforePasses + 1 || r.table === null || r.turn !== after);
 });
 
-check('settle case1 banker 123 upgrades', () => {
-  const r = newRoom({ trumpRules: true });
+check('settle case1 banker 123 scores without trump upgrade', () => {
+  const r = newRoom();
   addPlayer(r, 'H');
   start(r);
   r.banker = 'red';
   r.bankerSeat = 0;
-  r.levels = { red: '2', blue: '2' };
   // ranking seats 0,2,4 red then blue
   r.ranking = [r.players[0].id, r.players[2].id, r.players[4].id, r.players[1].id, r.players[3].id, r.players[5].id];
-  // leave some cards for tribute
   r.players.forEach((p) => {
     if (!p.hand.length) p.hand = [C('3'), C('4')];
   });
   settle(r);
   assert.strictEqual(r.result.winning, 'red');
   assert.strictEqual(r.result.points, 8);
-  assert.strictEqual(r.result.gain, 3);
-  assert.strictEqual(r.levels.red, '5'); // 2+3
-  assert.strictEqual(r.result.switchBanker, false);
+  assert.strictEqual(r.result.gain, 0);
+  assert.strictEqual(r.result.upgradePoints, 0);
+  assert.strictEqual(r.trump, '2');
+  assert.strictEqual(r.levels.red, '2');
+  assert.strictEqual(r.bankerSeat, 1);
+  assert.strictEqual(r.leadSeat, 1);
 });
 
-check('settle without trumpRules keeps trump 2', () => {
-  const r = newRoom({ trumpRules: false });
+check('settle keeps trump 2 and no level climb', () => {
+  const r = newRoom();
   addPlayer(r, 'H');
   start(r);
   assert.strictEqual(r.trump, '2');
   assert.strictEqual(r.trumpRules, false);
   r.banker = 'red';
   r.bankerSeat = 0;
-  r.levels = { red: '2', blue: '2' };
   r.ranking = [r.players[0].id, r.players[2].id, r.players[4].id, r.players[1].id, r.players[3].id, r.players[5].id];
   r.players.forEach((p) => {
     if (!p.hand.length) p.hand = [C('3'), C('4')];
@@ -181,21 +181,22 @@ check('settle without trumpRules keeps trump 2', () => {
   assert.strictEqual(r.result.gain, 0);
 });
 
-check('settle case8 other 123 switches banker', () => {
-  const r = newRoom({ trumpRules: true });
+check('settle other 123 rotates banker seat clockwise', () => {
+  const r = newRoom();
   addPlayer(r, 'H');
   start(r);
   r.banker = 'red';
   r.bankerSeat = 0;
-  r.levels = { red: '2', blue: '2' };
   r.ranking = [r.players[1].id, r.players[3].id, r.players[5].id, r.players[0].id, r.players[2].id, r.players[4].id];
   r.players.forEach((p) => {
     if (!p.hand.length) p.hand = [C('3'), C('4')];
   });
   settle(r);
   assert.strictEqual(r.result.winning, 'blue');
-  assert.strictEqual(r.result.switchBanker, true);
   assert.strictEqual(r.result.points, 8);
+  assert.strictEqual(r.bankerSeat, 1);
+  assert.strictEqual(r.leadSeat, 1);
+  assert.strictEqual(r.banker, teamOf(1));
 });
 
 check('full bot round completes', () => {

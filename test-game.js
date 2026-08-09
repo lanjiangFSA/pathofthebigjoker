@@ -187,12 +187,11 @@ check('full round with trumpRules off stays at 2', () => {
 });
 
 check('settle accumulates score from 0', () => {
-  const r = newRoom({ trumpRules: true });
+  const r = newRoom();
   addPlayer(r, 'H');
   start(r);
   r.banker = 'red';
   r.bankerSeat = 0;
-  r.levels = { red: '2', blue: '2' };
   r.scores = { red: 0, blue: 0 };
   r.ranking = [
     r.players[0].id,
@@ -209,6 +208,42 @@ check('settle accumulates score from 0', () => {
   assert.strictEqual(r.scores.red, 8);
   assert.strictEqual(r.scores.blue, 0);
   assert.ok(r.result.points >= 8);
+  assert.strictEqual(r.bankerSeat, 1);
+  assert.strictEqual(r.leadSeat, 1);
+});
+
+check('join idempotent by id and leave ai', () => {
+  const { leavePlayer, findPlayer } = require('./logic');
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  const before = r.players.length;
+  leavePlayer(r, h.id, 'ai');
+  assert.strictEqual(r.players.length, before);
+  assert.ok(findPlayer(r, h.id).bot);
+  assert.ok(r.started);
+});
+
+check('match ends at 6 then regroup on start', () => {
+  const { regroupHumans } = require('./logic');
+  const r = newRoom();
+  addPlayer(r, 'A');
+  addPlayer(r, 'B');
+  start(r);
+  assert.strictEqual(r.matchRound, 1);
+  r.matchRound = 6;
+  r.ranking = r.players.map((p) => p.id);
+  r.players.forEach((p) => {
+    if (!p.hand.length) p.hand = [{ id: uid(), r: '3', s: '♠' }];
+  });
+  settle(r);
+  assert.ok(r.matchOver);
+  const scores = { ...r.scores };
+  start(r);
+  assert.strictEqual(r.matchRound, 1);
+  assert.ok(!r.matchOver);
+  assert.deepStrictEqual(r.scores, { red: 0, blue: 0 });
+  assert.ok(scores.red + scores.blue >= 0);
 });
 
 check('TURN_MS is 25s and first lead 45s', () => {

@@ -295,14 +295,13 @@ function beats(challenger, table) {
   return false;
 }
 
-function newRoom(opts = {}) {
-  const trumpRules = !!opts.trumpRules;
+function newRoom(_opts = {}) {
   return {
     code: code(),
     players: [],
     host: null,
     started: false,
-    trumpRules,
+    trumpRules: false,
     trump: '2',
     levels: { red: '2', blue: '2' },
     scores: { red: 0, blue: 0 },
@@ -311,12 +310,16 @@ function newRoom(opts = {}) {
     leadSeat: 0,
     turn: 0,
     table: null,
+    lastTable: null,
+    lastTrickShow: [],
     passes: 0,
     trickLog: [],
     ranking: [],
     result: null,
-    message: trumpRules ? '等待牌友入座（将牌升级已开）' : '等待牌友入座（将牌固定为 2）',
+    message: '等待牌友入座',
     round: 0,
+    matchRound: 0,
+    matchOver: false,
     turnDeadline: null,
     firstLeadDone: false,
   };
@@ -327,8 +330,23 @@ function addPlayer(r, name, bot = false) {
   const p = { id: uid(), name: (name || '牌友').trim().slice(0, 12), hand: [], bot, role: 'support' };
   r.players.push(p);
   if (!r.host && !bot) r.host = p.id;
-  r.message = `${p.name}${bot ? '（AI）' : ''} 入座（${r.players.length}/6）`;
+  r.message = `${p.name}${bot ? '（AI）' : ''} 入座（${r.players.filter((x) => !x.bot).length} 人真人 / ${r.players.length} 座）`;
   return p;
+}
+
+function findPlayer(r, id) {
+  return r.players.find((p) => p.id === id) || null;
+}
+
+function ensureHost(r) {
+  if (r.host && r.players.some((p) => p.id === r.host && !p.bot)) return;
+  const human = r.players.find((p) => !p.bot);
+  r.host = human ? human.id : null;
+}
+
+function stripBots(r) {
+  r.players = r.players.filter((p) => !p.bot);
+  ensureHost(r);
 }
 
 function addBots(r) {
@@ -339,6 +357,113 @@ function addBots(r) {
     while (r.players.some((p) => p.name === name)) name = `${name}${Math.ceil(Math.random() * 9)}`;
     addPlayer(r, name, true);
   }
+}
+
+function snapshotTable(table) {
+  if (!table) return null;
+  return {
+    player: table.player,
+    combo: { kind: table.combo.kind, rank: table.combo.rank, label: table.combo.label },
+    cards: table.cards.map((c) => ({ r: c.r, s: c.s, id: c.id })),
+  };
+}
+
+function endTrickKeepShow(r) {
+  r.lastTrickShow = (r.trickLog || []).map((t) => ({
+    playerId: t.playerId,
+    name: t.name,
+    pass: !!t.pass,
+    label: t.label,
+    cards: t.cards || [],
+  }));
+  if (r.table) r.lastTable = snapshotTable(r.table);
+  r.table = null;
+  r.passes = 0;
+  r.trickLog = [];
+}
+
+function abortToLobby(r) {
+  r.started = false;
+  r.table = null;
+  r.lastTable = null;
+  r.lastTrickShow = [];
+  r.trickLog = [];
+  r.ranking = [];
+  r.result = null;
+  r.turnDeadline = null;
+  r.firstLeadDone = false;
+  r.players.forEach((p) => {
+    p.hand = [];
+  });
+  stripBots(r);
+  r.message = '牌局已中止，等待开局';
+}
+
+function leavePlayer(r, id, mode) {
+  const p = findPlayer(r, id);
+  if (!p) throw Error('你不在该房间');
+  if (p.bot) throw Error('AI 不能退出');
+  if (mode === 'abort' || !r.started) {
+    if (r.started) abortToLobby(r);
+    r.players = r.players.filter((x) => x.id !== id);
+    stripBots(r);
+    ensureHost(r);
+    if (!r.players.length) return { empty: true };
+    r.message = `${p.name} 已离开（${r.players.filter((x) => !x.bot).length} 人）`;
+    return { empty: false, left: true };
+  }
+  if (mode === 'ai') {
+    p.bot = true;
+    ensureHost(r);
+    r.message = `${p.name} 已离席，AI 接手`;
+    return { empty: false, ai: true };
+  }
+  throw Error('请选择退出方式');
+}
+
+function kickPlayer(r, hostId, targetId) {
+  if (r.started) throw Error('对局中不能踢人');
+  if (r.host !== hostId) throw Error('只有房主可以踢人');
+  if (hostId === targetId) throw Error('不能踢自己');
+  const t = findPlayer(r, targetId);
+  if (!t) throw Error('找不到该玩家');
+  if (t.bot) throw Error('不能踢 AI');
+  r.players = r.players.filter((p) => p.id !== targetId);
+  ensureHost(r);
+  r.message = `${t.name} 被移出房间`;
+  return t;
+}
+
+function teamLineup(r) {
+  const red = [];
+  const blue = [];
+  r.players.forEach((p, i) => {
+    (teamOf(i) === 'red' ? red : blue).push(p.name);
+  });
+  return { red, blue };
+}
+
+function regroupHumans(r) {
+  const humans = r.players.filter((p) => !p.bot);
+  const shuffled = shuffleNames(humans);
+  r.players = [];
+  shuffled.forEach((h) => {
+    h.hand = [];
+    h.bot = false;
+    r.players.push(h);
+  });
+  ensureHost(r);
+  addBots(r);
+  r.scores = { red: 0, blue: 0 };
+  r.matchRound = 0;
+  r.matchOver = false;
+  r.round = 0;
+  r.result = null;
+  r.bankerSeat = Math.floor(Math.random() * 6);
+  r.banker = teamOf(r.bankerSeat);
+  r.leadSeat = r.bankerSeat;
+  const line = teamLineup(r);
+  r.message = `重新分组！红队：${line.red.join('、')}；蓝队：${line.blue.join('、')}`;
 }
 
 function subsetsOfSize(arr, size, limit = 800) {
@@ -622,9 +747,7 @@ function resolveSureWinTrick(r) {
     if (p.id === lead || r.ranking.includes(p.id)) return;
     r.trickLog.push({ playerId: p.id, name: p.name, pass: true, label: '不出', cards: [] });
   });
-  r.table = null;
-  r.passes = 0;
-  r.trickLog = [];
+  endTrickKeepShow(r);
   r.turn = r.players.findIndex((x) => x.id === lead);
   if (r.turn < 0 || r.ranking.includes(lead)) next(r);
   else armTurn(r);
@@ -672,7 +795,21 @@ function checkTimeout(r) {
   if (Date.now() < r.turnDeadline) return false;
   const p = r.players[r.turn];
   if (p?.bot) return false;
-  return autoAct(r);
+  const acted = autoAct(r);
+  if (!acted && r.started) {
+    // Avoid stuck at 0s: force advance
+    try {
+      if (r.table) pass(r, p);
+      else if (p?.hand?.length) {
+        const sorted = sort([...p.hand], r.trump);
+        play(r, p, [sorted[sorted.length - 1].id]);
+      } else next(r);
+    } catch {
+      next(r);
+    }
+    return true;
+  }
+  return acted;
 }
 
 function pointsToSteps(points) {
@@ -783,37 +920,38 @@ function settle(r) {
     }
   }
 
-  const steps = r.trumpRules ? pointsToSteps(points) : 0;
-  if (r.trumpRules) {
-    const before = gradeRanks.indexOf(r.levels[winning]);
-    r.levels[winning] = gradeRanks[Math.min(gradeRanks.length - 1, before + steps)];
-  }
-
-  const oldBankerSeat = r.bankerSeat;
-  if (switchBanker) {
-    r.bankerSeat = (oldBankerSeat + 1) % 6;
-    r.banker = teamOf(r.bankerSeat);
-  } else {
-    r.banker = banker;
-    if (teamOf(r.bankerSeat) !== r.banker) {
-      r.bankerSeat = r.players.findIndex((_, i) => teamOf(i) === r.banker);
-    }
-  }
-
   // Scoreboard uses catch-based 计分 even when upgrade points are 0 (cases 6/7 etc).
   const boardPoints = Math.max(points, scoreFromPlaces(places, winning));
 
-  r.trump = r.trumpRules ? r.levels[r.banker] : '2';
-  r.leadSeat = order[0].seat;
+  r.trump = '2';
+  // Next round: banker (= first lead) rotates clockwise by seat
+  r.bankerSeat = (r.bankerSeat + 1) % 6;
+  r.banker = teamOf(r.bankerSeat);
+  r.leadSeat = r.bankerSeat;
   r.started = false;
   r.trickLog = [];
+  r.lastTrickShow = [];
+  r.lastTable = null;
   r.turnDeadline = null;
   if (!r.scores) r.scores = { red: 0, blue: 0 };
   r.scores[winning] = (r.scores[winning] || 0) + boardPoints;
-  r.result = { winning, points: boardPoints, upgradePoints: points, gain: steps, places, tributers, switchBanker };
-  r.message = r.trumpRules
-    ? `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints} 分（总分 ${r.scores[winning]}）/ 升 ${steps} 级${switchBanker ? '，换庄' : '，续庄'}；将牌 ${r.trump}。点「开始下一局」继续`
-    : `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints} 分（总分 ${r.scores[winning]}）${switchBanker ? '，换庄' : '，续庄'}；将牌固定 2。点「开始下一局」继续`;
+  r.result = {
+    winning,
+    points: boardPoints,
+    upgradePoints: 0,
+    gain: 0,
+    places,
+    tributers,
+    switchBanker,
+  };
+  const mr = r.matchRound || 1;
+  if (mr >= 6) {
+    r.matchOver = true;
+    r.message = `本赛段结束！红 ${r.scores.red} : ${r.scores.blue} 蓝（本副 ${winning === 'red' ? '红' : '蓝'} +${boardPoints}）。点「开始下一局」重新分组`;
+  } else {
+    const nextBanker = r.players[r.bankerSeat]?.name || '';
+    r.message = `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints}（红 ${r.scores.red} : ${r.scores.blue} 蓝）· 第 ${mr}/6 副。下局庄/首出：${nextBanker}。点「开始下一局」`;
+  }
 
   if (tributers.length) applyAutoTribute(r, tributers, winning);
 }
@@ -872,31 +1010,39 @@ function applyAutoTribute(r, tributers, winningTeam) {
 
 function start(r) {
   if (r.started) throw Error('牌局已经开始');
+  if (r.matchOver) regroupHumans(r);
   addBots(r);
-  r.round++;
-  if (r.round === 1) {
+  r.trump = '2';
+  r.matchRound = (r.matchRound || 0) + 1;
+  r.round = (r.round || 0) + 1;
+  if (r.matchRound === 1) {
     r.bankerSeat = Math.floor(Math.random() * 6);
     r.banker = teamOf(r.bankerSeat);
-    r.trump = r.trumpRules ? r.levels[r.banker] : '2';
-    r.leadSeat = r.bankerSeat;
-  } else if (!r.trumpRules) {
-    r.trump = '2';
   }
+  r.leadSeat = r.bankerSeat;
   const d = deck();
   r.players.forEach((p, i) => {
     p.hand = sort(d.slice(i * 27, i * 27 + 27), r.trump);
   });
   assignRoles(r);
   r.started = true;
+  r.matchOver = false;
   r.turn = r.leadSeat;
   r.table = null;
+  r.lastTable = null;
+  r.lastTrickShow = [];
   r.passes = 0;
   r.trickLog = [];
   r.ranking = [];
   r.result = null;
   r.firstLeadDone = false;
   armTurn(r);
-  r.message = `${r.players[r.turn].name} 先出（庄：${r.players[r.bankerSeat].name}）；将牌：${r.trump}`;
+  const line = teamLineup(r);
+  const bankerName = r.players[r.bankerSeat]?.name || '';
+  r.message =
+    r.matchRound === 1
+      ? `第 1/6 副开局。红队：${line.red.join('、')}；蓝队：${line.blue.join('、')}。庄/首出：${bankerName}`
+      : `第 ${r.matchRound}/6 副。庄/首出：${bankerName}`;
 }
 
 function play(r, p, ids) {
@@ -913,6 +1059,11 @@ function play(r, p, ids) {
     throw Error('只可出合法单张、对子、三张或五路');
   }
   if (!beats(c, r.table?.combo)) throw Error(`压不住：需大于桌上的${r.table.combo.label}`);
+  // New lead clears previous trick display
+  if (!r.table) {
+    r.lastTable = null;
+    r.lastTrickShow = [];
+  }
   p.hand = p.hand.filter((card) => !uniq.includes(card.id));
   r.table = { player: p.id, cards, combo: c };
   r.passes = 0;
@@ -950,9 +1101,7 @@ function pass(r, p) {
   r.message = `${p.name}${p.bot ? '（AI）' : ''} 不出`;
   if (r.passes >= activeCount(r) - 1) {
     const lead = r.table.player;
-    r.table = null;
-    r.passes = 0;
-    r.trickLog = [];
+    endTrickKeepShow(r);
     r.turn = r.players.findIndex((x) => x.id === lead);
     if (r.ranking.includes(lead)) next(r);
     else armTurn(r);
@@ -1089,14 +1238,27 @@ function botMove(r, p) {
 function state(r, id) {
   const me = r.players.find((p) => p.id === id);
   const myTeam = me ? teamOf(r.players.indexOf(me)) : null;
+  const mapTrick = (t) => ({
+    playerId: t.playerId,
+    name: t.name,
+    pass: !!t.pass,
+    label: t.label,
+    cards: t.cards || [],
+  });
+  const tableSnap = (t) =>
+    t && {
+      player: t.player,
+      combo: { kind: t.combo.kind, rank: t.combo.rank, label: t.combo.label },
+      cards: t.cards.map((c) => ({ r: c.r, s: c.s })),
+    };
   return {
     type: 'state',
     code: r.code,
     started: r.started,
     host: r.host,
-    trumpRules: !!r.trumpRules,
-    trump: r.trump,
-    levels: r.levels,
+    trumpRules: false,
+    trump: '2',
+    levels: { red: '2', blue: '2' },
     scores: r.scores || { red: 0, blue: 0 },
     banker: r.banker,
     bankerSeat: r.bankerSeat,
@@ -1109,18 +1271,12 @@ function state(r, id) {
     result: r.result,
     message: r.message,
     round: r.round,
-    trickLog: (r.trickLog || []).map((t) => ({
-      playerId: t.playerId,
-      name: t.name,
-      pass: !!t.pass,
-      label: t.label,
-      cards: t.cards || [],
-    })),
-    table: r.table && {
-      player: r.table.player,
-      combo: { kind: r.table.combo.kind, rank: r.table.combo.rank, label: r.table.combo.label },
-      cards: r.table.cards.map((c) => ({ r: c.r, s: c.s })),
-    },
+    matchRound: r.matchRound || 0,
+    matchOver: !!r.matchOver,
+    trickLog: (r.trickLog || []).map(mapTrick),
+    lastTrickShow: (r.lastTrickShow || []).map(mapTrick),
+    table: tableSnap(r.table),
+    lastTable: tableSnap(r.lastTable),
     players: r.players.map((p, i) => ({
       id: p.id,
       name: p.name,
@@ -1131,6 +1287,7 @@ function state(r, id) {
       done: r.ranking.includes(p.id),
       role: p.role,
       teammate: myTeam != null && teamOf(i) === myTeam && p.id !== id,
+      banker: i === r.bankerSeat,
     })),
     hand: me?.hand || [],
   };
@@ -1151,6 +1308,11 @@ module.exports = {
   newRoom,
   addPlayer,
   addBots,
+  findPlayer,
+  leavePlayer,
+  kickPlayer,
+  abortToLobby,
+  regroupHumans,
   start,
   play,
   pass,
