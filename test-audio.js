@@ -57,9 +57,10 @@ check('phase play ignores done seats with low count', () => {
   assert.strictEqual(phaseFromState(st), 'play');
 });
 
-check('snapshot: phase only no sfx storm', () => {
+check('snapshot: only yourTurn ding when my turn', () => {
   const next = base({
     started: true,
+    turn: 0,
     trickLog: [
       { pass: false },
       { pass: true },
@@ -69,7 +70,9 @@ check('snapshot: phase only no sfx storm', () => {
   });
   const ev = diffAudioEvents(null, next, 'p0', { snapshot: true });
   assert.strictEqual(ev.phase, 'tension');
-  assert.deepStrictEqual(ev.sfx, []);
+  assert.deepStrictEqual(ev.sfx, ['yourTurn']);
+  const evOther = diffAudioEvents(null, next, 'p2', { snapshot: true });
+  assert.deepStrictEqual(evOther.sfx, []);
 });
 
 check('deal + play phase on start', () => {

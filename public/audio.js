@@ -22,20 +22,24 @@ const GameAudio = (() => {
     seatJoin: BASE + 'sfx-seat-join.mp3',
     tension: BASE + 'sfx-tension.mp3',
   };
-  const SFX_BASE = { passF: 0.9, passM: 0.9, yourTurn: 0.45, default: 0.7 };
+  const SFX_BASE = { passF: 0.9, passM: 0.9, yourTurn: 1.0, default: 0.7 };
 
-  // v0.5.5 keys so prior localStorage defaults are replaced
-  const MUSIC_KEY = 'dglz-v055-vol-music';
-  const SFX_KEY = 'dglz-v055-vol-sfx';
+  // Bump keys when defaults change; also clears values wrongly written as 0
+  const MUSIC_KEY = 'dglz-v060b-vol-music';
+  const SFX_KEY = 'dglz-v060b-vol-sfx';
+  const DEFAULT_MUSIC = 10;
+  const DEFAULT_SFX = 30;
 
   function clampVol(n, fallback) {
+    // localStorage miss is null; Number(null)===0 must not swallow defaults
+    if (n === null || n === undefined || n === '') return fallback;
     const v = Number(n);
     if (!Number.isFinite(v)) return fallback;
     return Math.max(0, Math.min(100, Math.round(v)));
   }
 
-  let musicVol = clampVol(localStorage.getItem(MUSIC_KEY), 30);
-  let sfxVol = clampVol(localStorage.getItem(SFX_KEY), 100);
+  let musicVol = clampVol(localStorage.getItem(MUSIC_KEY), DEFAULT_MUSIC);
+  let sfxVol = clampVol(localStorage.getItem(SFX_KEY), DEFAULT_SFX);
 
   let ctx = null;
   let musicBus = null;
@@ -196,6 +200,25 @@ const GameAudio = (() => {
     nextGain._targetVol = target;
   }
 
+  /** Short “叮” chime — reliable even if mp3 buffer not ready. */
+  function playTurnDing() {
+    if (sfxVol <= 0) return;
+    ensureCtx();
+    const t0 = ctx.currentTime;
+    const g = ctx.createGain();
+    g.connect(sfxBus);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.7, t0 + 0.012);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.42);
+    const o = ctx.createOscillator();
+    o.type = 'sine';
+    o.frequency.setValueAtTime(988, t0); // B5
+    o.frequency.setValueAtTime(1319, t0 + 0.07); // E6
+    o.connect(g);
+    o.start(t0);
+    o.stop(t0 + 0.45);
+  }
+
   function playSfx(ev) {
     if (!ev || sfxVol <= 0) return;
     let name = ev;
@@ -210,6 +233,10 @@ const GameAudio = (() => {
           ? AudioDiff.guessVoiceGender(speaker)
           : 'm';
       name = g === 'f' ? 'passF' : 'passM';
+    }
+    if (name === 'yourTurn') {
+      playTurnDing();
+      return;
     }
     ensureCtx();
     const url = SFX_URL[name];
@@ -234,8 +261,13 @@ const GameAudio = (() => {
     if (typeof AudioDiff === 'undefined') return;
     const ev = AudioDiff.diffAudioEvents(prev, next, meId, opts);
     setPhase(ev.phase);
-    if (!(opts && opts.snapshot)) {
-      for (const s of ev.sfx) playSfx(s);
+    const snapshot = !!(opts && opts.snapshot);
+    for (const s of ev.sfx) {
+      if (snapshot) {
+        const id = typeof s === 'object' ? s.id : s;
+        if (id !== 'yourTurn') continue;
+      }
+      playSfx(s);
     }
   }
 

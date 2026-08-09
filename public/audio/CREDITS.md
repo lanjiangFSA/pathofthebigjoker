@@ -24,4 +24,4 @@ Pass voice: Microsoft Edge Neural TTS via `edge-tts` (local generate).
 | `sfx-seat-join.mp3` | 入座 | Mixkit sci-fi notification |
 | `sfx-tension.mp3` | 进入紧张门槛 | Mixkit casino bling |
 
-Defaults (v0.5.5): music volume 30, SFX volume 100.
+Defaults (v0.6.0): music volume 10, SFX volume 30.

@@ -40,7 +40,12 @@
     const snapshot = !!(opts && opts.snapshot);
     if (!next) return { phase: 'wait', sfx: [] };
     const phase = phaseFromState(next);
-    if (snapshot || !prev) return { phase, sfx: [] };
+    // Snapshot / first paint: only a soft your-turn ding if it's already me (no storm of play/pass)
+    if (snapshot || !prev) {
+      const turnId = next.started ? next.players?.[next.turn]?.id : null;
+      const sfx = next.started && turnId === meId ? ['yourTurn'] : [];
+      return { phase, sfx };
+    }
 
     const sfx = [];
 
