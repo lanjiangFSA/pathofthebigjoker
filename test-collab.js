@@ -1,6 +1,6 @@
 'use strict';
 /**
- * Collaboration scenarios from gamerules/howtocollabrate.md
+ * Collaboration scenarios (see gamerules/current-ai.md)
  */
 const assert = require('assert');
 const {

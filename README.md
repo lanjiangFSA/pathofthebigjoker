@@ -29,8 +29,7 @@ node server.js
 - 牌桌 BGM 与音效（含轮到你「叮」）；默认音乐 10 / 音效 30；顶栏可分别调节。
 - 昵称默认用上次填写；首次进入为「牌友」+ 随机字母。
 
-规则对齐 `gamerules/howtoplay.md`；AI 配合对齐 `gamerules/howtocollabrate.md`（团队得分优先）。  
-**当前实现摘要**：玩法见 `gamerules/current-play.md`，AI 见 `gamerules/current-ai.md`。
+玩法与 AI 实现摘要：`gamerules/current-play.md`、`gamerules/current-ai.md`。
 
 ## 最近更新
 

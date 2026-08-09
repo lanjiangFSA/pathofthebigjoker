@@ -1,6 +1,6 @@
 # 当前 AI 打牌逻辑（Web 实现版）
 
-本文描述 **本仓库当前已实现** 的机器人策略，代码主要在 `logic.js`：`candidates` → `pickLead` / `pickBeat` → `botMove`。配合理念见 `howtocollabrate.md`；目标是 **红蓝队得分最大化**（抓住对手名次），不是个人最快出完。
+本文描述 **本仓库当前已实现** 的机器人策略，代码主要在 `logic.js`：`candidates` → `pickLead` / `pickBeat` → `botMove`。目标是 **红蓝队得分最大化**（抓住对手名次），不是个人最快出完。
 
 ## 1. 总流程
 
