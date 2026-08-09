@@ -5,10 +5,11 @@
 const GameAudio = (() => {
   const BASE = 'audio/';
   // Phase volumes already at 80% of the original mix levels.
+  // wait / play / tension 同一主曲；tension 提高 playbackRate（更快 rpm）
   const BGM = {
     wait: { url: BASE + 'bgm-main.mp3', rate: 0.88, vol: 0.336 },
     play: { url: BASE + 'bgm-main.mp3', rate: 1.0, vol: 0.464 },
-    tension: { url: BASE + 'bgm-tension.mp3', rate: 1.06, vol: 0.528 },
+    tension: { url: BASE + 'bgm-main.mp3', rate: 1.18, vol: 0.5 },
   };
   const SFX_URL = {
     play: BASE + 'sfx-play.mp3',
@@ -86,7 +87,7 @@ const GameAudio = (() => {
 
   function preload() {
     if (loadPromise) return loadPromise;
-    const urls = new Set([BGM.wait.url, BGM.tension.url, ...Object.values(SFX_URL)]);
+    const urls = new Set([BGM.wait.url, ...Object.values(SFX_URL)]);
     loadPromise = Promise.all([...urls].map((u) => decode(u).catch(() => null)));
     return loadPromise;
   }
@@ -219,6 +220,32 @@ const GameAudio = (() => {
     o.stop(t0 + 0.45);
   }
 
+  /** Very short soft blip for seat join (replaces long sci-fi cue). */
+  function playSeatJoinPing() {
+    if (sfxVol <= 0) return;
+    ensureCtx();
+    const t0 = ctx.currentTime;
+    const g = ctx.createGain();
+    g.connect(sfxBus);
+    g.gain.setValueAtTime(0.0001, t0);
+    g.gain.exponentialRampToValueAtTime(0.45, t0 + 0.008);
+    g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.14);
+    const o = ctx.createOscillator();
+    o.type = 'triangle';
+    o.frequency.setValueAtTime(660, t0);
+    o.frequency.exponentialRampToValueAtTime(880, t0 + 0.05);
+    o.connect(g);
+    o.start(t0);
+    o.stop(t0 + 0.16);
+  }
+
+  /** Back to lobby: force wait BGM, clear turn timer SFX latch. */
+  function enterLobby() {
+    lastTimerWarnSec = null;
+    phase = null;
+    setPhase('wait');
+  }
+
   function playSfx(ev) {
     if (!ev || sfxVol <= 0) return;
     let name = ev;
@@ -236,6 +263,10 @@ const GameAudio = (() => {
     }
     if (name === 'yourTurn') {
       playTurnDing();
+      return;
+    }
+    if (name === 'seatJoin') {
+      playSeatJoinPing();
       return;
     }
     ensureCtx();
@@ -324,6 +355,7 @@ const GameAudio = (() => {
     getMusicVolume,
     getSfxVolume,
     setPhase,
+    enterLobby,
     playSfx,
     applyDiff,
     maybeTimerWarn,

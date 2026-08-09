@@ -468,6 +468,11 @@ $('#leave').onclick = async () => {
     clearSession();
     me = room = state = null;
     chosen = [];
+    audioPrev = null;
+    audioBootstrapped = false;
+    if (typeof GameAudio !== 'undefined') {
+      GameAudio.enterLobby();
+    }
     $('#table').hidden = true;
     $('#lobby').hidden = false;
     document.body.classList.remove('in-game');
