@@ -14,6 +14,7 @@ const {
   botMove,
   state,
   checkTimeout,
+  onlyAiPlaying,
 } = require('./logic');
 
 const os = require('os');
@@ -41,6 +42,7 @@ function push(r) {
     if (s) {
       try {
         s.write(`data: ${JSON.stringify(state(r, p.id))}\n\n`);
+        if (typeof s.flush === 'function') s.flush();
       } catch {
         streams.delete(p.id);
       }
@@ -53,7 +55,10 @@ function scheduleBot(r) {
   const p = r.players[r.turn];
   if (!p?.bot) return;
   botBusy.add(r.code);
-  const delay = 1800 + Math.floor(Math.random() * 700);
+  // Only AI left: ~40ms/step so a hand finishes in ~10s; otherwise human-paced
+  const delay = onlyAiPlaying(r)
+    ? 35 + Math.floor(Math.random() * 25)
+    : 1800 + Math.floor(Math.random() * 700);
   setTimeout(() => {
     try {
       if (r.started && r.players[r.turn]?.id === p.id) {
@@ -64,6 +69,7 @@ function scheduleBot(r) {
       console.error('botMove', r.code, e.message);
     } finally {
       botBusy.delete(r.code);
+      if (r.started && onlyAiPlaying(r)) scheduleBot(r);
     }
   }, delay);
 }
@@ -74,6 +80,18 @@ setInterval(() => {
     else scheduleBot(r);
   }
 }, 200);
+
+// SSE keep-alive so waiting clients stay connected and see joins
+setInterval(() => {
+  for (const [id, res] of streams.entries()) {
+    try {
+      res.write(`:ping\n\n`);
+      if (typeof res.flush === 'function') res.flush();
+    } catch {
+      streams.delete(id);
+    }
+  }
+}, 12000);
 
 function json(res, status, x) {
   res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
@@ -205,6 +223,7 @@ http
           'Content-Type': 'text/event-stream',
           'Cache-Control': 'no-cache',
           Connection: 'keep-alive',
+          'X-Accel-Buffering': 'no',
         });
         // Replace prior stream for same id (refresh)
         const prev = streams.get(p.id);
@@ -217,6 +236,7 @@ http
         }
         streams.set(p.id, res);
         res.write(`data: ${JSON.stringify(state(r, p.id))}\n\n`);
+        if (typeof res.flush === 'function') res.flush();
         req.on('close', () => {
           if (streams.get(p.id) === res) streams.delete(p.id);
         });
