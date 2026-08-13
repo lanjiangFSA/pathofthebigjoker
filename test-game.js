@@ -208,8 +208,21 @@ check('settle accumulates score from 0', () => {
   assert.strictEqual(r.scores.red, 8);
   assert.strictEqual(r.scores.blue, 0);
   assert.ok(r.result.points >= 8);
+  assert.deepStrictEqual(r.result.tributers, []);
   assert.strictEqual(r.bankerSeat, 1);
   assert.strictEqual(r.leadSeat, 1);
+});
+
+check('onlyAiPlaying when no humans left in hand', () => {
+  const { onlyAiPlaying, humansStillPlaying } = require('./logic');
+  const r = newRoom();
+  const h = addPlayer(r, 'H');
+  start(r);
+  assert.strictEqual(onlyAiPlaying(r), false);
+  assert.strictEqual(humansStillPlaying(r), true);
+  r.ranking.push(h.id);
+  assert.strictEqual(humansStillPlaying(r), false);
+  assert.strictEqual(onlyAiPlaying(r), true);
 });
 
 check('join idempotent by id and leave ai', () => {
