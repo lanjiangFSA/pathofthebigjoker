@@ -903,35 +903,27 @@ function settle(r) {
   let winning = order[0].team;
   let points = 0;
   let switchBanker = false;
-  let tributers = [];
-
-  const teamIdsAt = (team, ...ns) =>
-    order.filter((x, i) => x.team === team && ns.includes(i + 1)).map((x) => x.id);
 
   if (top3(b)) {
     // 1
     winning = banker;
     points = 8;
     switchBanker = false;
-    tributers = teamIdsAt(other, 4, 5, 6);
   } else if (top3(o)) {
     // 8
     winning = other;
     points = 8;
     switchBanker = true;
-    tributers = teamIdsAt(banker, 4, 5, 6);
   } else if (has(b, 1) && has(o, 5) && has(o, 6)) {
     // 2
     winning = banker;
     points = 5;
     switchBanker = false;
-    tributers = teamIdsAt(other, 5, 6);
   } else if (has(b, 1) && has(o, 6) && !has(o, 5) && !has(b, 6)) {
     // 3
     winning = banker;
     points = 3;
     switchBanker = false;
-    tributers = teamIdsAt(other, 6);
   } else if (has(b, 1) && has(b, 6)) {
     // 4 — 续庄不升级
     winning = banker;
@@ -939,26 +931,22 @@ function settle(r) {
     // 头家+(二三四)+尾家 → 1 分
     if (b.some((p) => p >= 2 && p <= 4)) points = 1;
     switchBanker = false;
-    tributers = [];
   } else if (has(o, 1) && has(o, 6)) {
     // 5
     winning = other;
     points = 0;
     if (o.some((p) => p >= 2 && p <= 4)) points = 1;
     switchBanker = true;
-    tributers = [];
   } else if (has(o, 1) && has(b, 6) && !has(b, 5)) {
     // 6
     winning = other;
     points = 0;
     switchBanker = true;
-    tributers = teamIdsAt(banker, 6);
   } else if (has(o, 1) && has(b, 5) && has(b, 6)) {
     // 7
     winning = other;
     points = 0;
     switchBanker = true;
-    tributers = teamIdsAt(banker, 5, 6);
   } else {
     // Fallback by catch count
     winning = order[0].team;
@@ -968,9 +956,6 @@ function settle(r) {
     switchBanker = winning !== banker;
     if (winning === banker && has(b, 6)) {
       points = b.some((p) => p >= 2 && p <= 4) ? 1 : 0;
-    }
-    if (lastTeamTribute(order, winning)) {
-      tributers = teamIdsAt(winning === 'red' ? 'blue' : 'red', 5, 6).slice(-caught || 1);
     }
   }
 
@@ -995,7 +980,7 @@ function settle(r) {
     upgradePoints: 0,
     gain: 0,
     places,
-    tributers,
+    tributers: [],
     switchBanker,
   };
   const mr = r.matchRound || 1;
@@ -1006,8 +991,6 @@ function settle(r) {
     const nextBanker = r.players[r.bankerSeat]?.name || '';
     r.message = `${winning === 'red' ? '红队' : '蓝队'} +${boardPoints}（红 ${r.scores.red} : ${r.scores.blue} 蓝）· 第 ${mr}/6 副。下局庄/首出：${nextBanker}。点「开始下一局」`;
   }
-
-  if (tributers.length) applyAutoTribute(r, tributers, winning);
 }
 
 function scoreFromPlaces(places, winning) {
@@ -1023,43 +1006,6 @@ function scoreFromPlaces(places, winning) {
     return places[winning].some((p) => p >= 2 && p <= 4) ? 1 : 0;
   }
   return 0;
-}
-
-function lastTeamTribute(order, winning) {
-  return order[5]?.team !== winning;
-}
-
-function applyAutoTribute(r, tributers, winningTeam) {
-  const winners = r.players
-    .map((p, i) => ({ p, i, team: teamOf(i) }))
-    .filter((x) => x.team === winningTeam)
-    .sort((a, b) => r.ranking.indexOf(a.p.id) - r.ranking.indexOf(b.p.id));
-  const notes = [];
-  tributers.forEach((tid, idx) => {
-    const from = r.players.find((p) => p.id === tid);
-    const to = winners[idx % winners.length]?.p;
-    if (!from?.hand?.length || !to) return;
-    // Hands are empty after full round — tribute is between rounds using leftover cards.
-    // After settle all may have cards only if game ended early; typically losers still hold cards.
-    sort(from.hand, r.trump);
-    if (!from.hand.length) return;
-    const up = from.hand[0];
-    from.hand = from.hand.slice(1);
-    sort(to.hand, r.trump);
-    if (!to.hand.length) {
-      to.hand.push(up);
-      notes.push(`${from.name}进贡${up.r}${up.s}→${to.name}`);
-      return;
-    }
-    const back = to.hand[to.hand.length - 1];
-    to.hand = to.hand.filter((c) => c.id !== back.id);
-    to.hand.push(up);
-    from.hand.push(back);
-    sort(to.hand, r.trump);
-    sort(from.hand, r.trump);
-    notes.push(`${from.name}进贡${up.r}${up.s}→${to.name}，还${back.r}${back.s}`);
-  });
-  if (notes.length) r.message += '。' + notes.join('；');
 }
 
 function start(r) {
@@ -1161,6 +1107,14 @@ function pass(r, p) {
     else armTurn(r);
     r.message = `无人再压，${r.players[r.turn].name} 获得出牌权`;
   } else next(r);
+}
+
+function humansStillPlaying(r) {
+  return r.players.some((p) => !p.bot && !r.ranking.includes(p.id));
+}
+
+function onlyAiPlaying(r) {
+  return !!r.started && !humansStillPlaying(r);
 }
 
 function enemyShortest(r, myTeam) {
@@ -1528,4 +1482,6 @@ module.exports = {
   armTurn,
   autoAct,
   checkTimeout,
+  onlyAiPlaying,
+  humansStillPlaying,
 };
