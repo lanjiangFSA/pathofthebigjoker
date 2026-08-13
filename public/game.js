@@ -389,11 +389,26 @@ function render() {
           ? '开始发牌（AI 补位）'
           : '开始发牌'
     : '等待房主开始';
+  const humans = state.players.filter((p) => !p.bot);
+  const roster = $('#waitRoster');
+  if (roster) {
+    if (waiting) {
+      roster.hidden = false;
+      roster.innerHTML = `<b>已入座 ${humans.length} 人</b>：${
+        humans.length
+          ? humans.map((p) => (p.id === me ? `${p.name}（你）` : p.name)).join('、')
+          : '暂无'
+      }`;
+    } else {
+      roster.hidden = true;
+      roster.innerHTML = '';
+    }
+  }
   $('#startbox').querySelector('p').textContent = state.matchOver
     ? `赛段比分 红 ${scores.red} : ${scores.blue} 蓝 · 将重新随机分组`
     : nextRound
       ? `上局已结束 · 赛段 ${mr}/6 · 红 ${scores.red} : ${scores.blue} 蓝`
-      : '座位列表见牌桌；不足 6 人时开始后 AI 补齐';
+      : '座位见牌桌与上方名单；不足 6 人时开始后 AI 补齐';
 
   HandSelect.layout($('#hand'), {
     hand: state.hand || [],
