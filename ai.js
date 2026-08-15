@@ -1,0 +1,745 @@
+'use strict';
+/**
+ * Bot policy: candidates → pickLead / pickBeat → botMove.
+ * Shape preservation + probabilistic personality by nickname.
+ */
+const {
+  KIND,
+  suits,
+  combo,
+  beats,
+  teamOf,
+  isWild,
+  naturalPower,
+  subsetsOfSize,
+  STRAIGHT_WINDOWS,
+  sort,
+  play,
+  pass,
+  next,
+} = require('./logic');
+
+/** Nickname → probability tendencies (not absolute). intel 1–5 shown in UI. */
+const DEFAULT_PERSONA = {
+  intel: 3,
+  mistakeRate: 0.06,
+  eatTeammateRate: 0.01,
+  wildBias: 1,
+  weakFiveBias: 1,
+  elite: false,
+};
+
+const PERSONAS = {
+  十三点: { intel: 1, mistakeRate: 0.4, eatTeammateRate: 0.08, wildBias: 1.6, weakFiveBias: 2.2 },
+  小滑头: { intel: 2, mistakeRate: 0.18, eatTeammateRate: 0.03, wildBias: 1.35, weakFiveBias: 1.4 },
+  小赤佬: { intel: 2, mistakeRate: 0.16, eatTeammateRate: 0.025, wildBias: 1.3, weakFiveBias: 1.35 },
+  老克勒: { intel: 4, mistakeRate: 0.03, eatTeammateRate: 0, wildBias: 0.85, weakFiveBias: 0.7 },
+  路子王: { intel: 4, mistakeRate: 0.03, eatTeammateRate: 0, wildBias: 0.8, weakFiveBias: 0.65 },
+  册那队长: { intel: 4, mistakeRate: 0.04, eatTeammateRate: 0, wildBias: 0.85, weakFiveBias: 0.75 },
+  // 5★ elites: never mistake; tighter shape/wild; always main on team
+  麒麟: {
+    intel: 5,
+    elite: true,
+    mistakeRate: 0,
+    eatTeammateRate: 0,
+    wildBias: 0.55,
+    weakFiveBias: 0.45,
+  },
+  朝日: {
+    intel: 5,
+    elite: true,
+    mistakeRate: 0,
+    eatTeammateRate: 0,
+    wildBias: 0.55,
+    weakFiveBias: 0.45,
+  },
+};
+
+function personaFor(name) {
+  return { ...DEFAULT_PERSONA, ...(PERSONAS[name] || {}) };
+}
+
+function intelFor(name) {
+  return personaFor(name).intel || 3;
+}
+
+/** Effective persona for this seat: elite mates calm allies; facing elite rattles foes. */
+function effectivePersona(r, p) {
+  const base = personaFor(p.name);
+  if (base.elite || !r?.players) return base;
+  const seat = r.players.indexOf(p);
+  if (seat < 0) return base;
+  const myTeam = teamOf(seat);
+  const hasEliteMate = r.players.some(
+    (x, i) => i !== seat && teamOf(i) === myTeam && !r.ranking.includes(x.id) && personaFor(x.name).elite
+  );
+  const facingElite = r.players.some(
+    (x, i) => teamOf(i) !== myTeam && !r.ranking.includes(x.id) && personaFor(x.name).elite
+  );
+  let next = { ...base };
+  if (hasEliteMate) {
+    next.mistakeRate = Math.min(next.mistakeRate, 0.03);
+    next.eatTeammateRate = 0;
+    next.wildBias = Math.min(next.wildBias, 0.95);
+    next.weakFiveBias = Math.min(next.weakFiveBias, 0.95);
+  }
+  if (facingElite) {
+    next.mistakeRate = Math.min(0.72, next.mistakeRate + 0.28);
+    next.eatTeammateRate = Math.min(0.18, next.eatTeammateRate + 0.06);
+    next.wildBias = next.wildBias * 1.25;
+    next.weakFiveBias = next.weakFiveBias * 1.3;
+  }
+  return next;
+}
+
+function roll(p) {
+  return Math.random() < p;
+}
+
+function handStrength(hand, trump) {
+  let score = 0;
+  score += hand.filter(isWild).length * 8;
+  score += hand.filter((c) => c.r === trump).length * 5;
+  score += hand.filter((c) => c.r === 'A' || c.r === 'K').length * 2;
+  const by = {};
+  hand.forEach((c) => {
+    if (isWild(c)) return;
+    by[c.r] = (by[c.r] || 0) + 1;
+  });
+  const counts = Object.values(by);
+  score += counts.filter((n) => n >= 5).length * 12;
+  score += counts.filter((n) => n === 4).length * 8;
+  score += counts.filter((n) => n === 3).length * 4;
+  score += counts.filter((n) => n === 2).length * 2;
+  try {
+    const fives = candidates(hand, trump, null).filter((o) => o.cards.length === 5);
+    if (fives.some((o) => o.c.kind >= KIND.straightFlush)) score += 16;
+    else if (fives.some((o) => o.c.kind >= KIND.fourPlus)) score += 12;
+    else if (fives.some((o) => o.c.kind >= KIND.fullHouse)) score += 8;
+    else if (fives.length) score += 3;
+  } catch {
+    /* ignore */
+  }
+  return score;
+}
+
+function buildFiveCandidates(hand, wilds, by) {
+  const out = [];
+  const faces = Object.keys(by);
+  for (const f of faces) {
+    const list = by[f];
+    for (let w = 0; w <= Math.min(wilds.length, 5); w++) {
+      if (list.length + w >= 5 && list.length >= 1) {
+        for (const body of subsetsOfSize(list, Math.min(list.length, 5 - w), 8)) {
+          for (const ws of subsetsOfSize(wilds, w, 6)) {
+            if (body.length + ws.length === 5) out.push([...body, ...ws]);
+          }
+        }
+      }
+    }
+    for (let w = 0; w <= Math.min(wilds.length, 3); w++) {
+      const need = Math.max(0, 4 - list.length);
+      if (need > w) continue;
+      const take = Math.min(list.length, 4);
+      for (const body of subsetsOfSize(list, take, 6)) {
+        for (const ws of subsetsOfSize(wilds, w, 4)) {
+          const used = body.length + ws.length;
+          if (used > 5) continue;
+          const remain = 5 - used;
+          if (remain === 1) {
+            const kickers = hand.filter((c) => !body.includes(c) && !ws.includes(c));
+            for (const k of kickers.slice(0, 12)) out.push([...body, ...ws, k]);
+          } else if (remain === 0 && body.length + ws.length === 5) {
+            out.push([...body, ...ws]);
+          }
+        }
+      }
+    }
+  }
+  for (let i = 0; i < faces.length; i++) {
+    for (let j = 0; j < faces.length; j++) {
+      if (i === j) continue;
+      const a = by[faces[i]];
+      const b = by[faces[j]];
+      for (let w = 0; w <= wilds.length; w++) {
+        for (let na = Math.min(a.length, 3); na >= 1; na--) {
+          for (let nb = Math.min(b.length, 2); nb >= 1; nb--) {
+            if (na + nb + w !== 5) continue;
+            if (na + Math.min(w, 3 - na) < 3) continue;
+            for (const ta of subsetsOfSize(a, na, 4)) {
+              for (const tb of subsetsOfSize(b, nb, 4)) {
+                for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...ta, ...tb, ...ws]);
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+  const normals = hand.filter((c) => !isWild(c));
+  for (const win of STRAIGHT_WINDOWS) {
+    const picks = [];
+    let miss = 0;
+    for (const face of win) {
+      const card = normals.find((c) => c.r === face && !picks.includes(c));
+      if (card) picks.push(card);
+      else miss++;
+    }
+    if (miss <= wilds.length && picks.length + Math.min(miss, wilds.length) === 5) {
+      out.push([...picks, ...wilds.slice(0, miss)]);
+    }
+  }
+  for (const s of suits) {
+    const suited = normals.filter((c) => c.s === s);
+    for (let w = 0; w <= Math.min(wilds.length, 4); w++) {
+      if (suited.length + w < 5) continue;
+      for (const five of subsetsOfSize(suited, 5 - w, 10)) {
+        for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...five, ...ws]);
+      }
+    }
+  }
+  if (wilds.length >= 5) for (const ws of subsetsOfSize(wilds, 5, 5)) out.push(ws);
+  return out;
+}
+
+function candidates(hand, trump, table) {
+  const out = [];
+  for (const c of hand) out.push([c]);
+  const by = {};
+  hand.forEach((c) => {
+    const k = isWild(c) ? 'wild' : c.r;
+    (by[k] ??= []).push(c);
+  });
+  const wilds = by.wild || [];
+  const faces = Object.keys(by).filter((k) => k !== 'wild');
+
+  for (const f of faces) {
+    const list = by[f];
+    for (let w = 0; w <= wilds.length; w++) {
+      for (let n = 1; n <= list.length; n++) {
+        if (n + w === 2) {
+          for (const pair of subsetsOfSize(list, n, 20))
+            for (const ws of subsetsOfSize(wilds, w, 10)) out.push([...pair, ...ws]);
+        }
+        if (n + w === 3) {
+          for (const trip of subsetsOfSize(list, n, 15))
+            for (const ws of subsetsOfSize(wilds, w, 8)) out.push([...trip, ...ws]);
+        }
+      }
+    }
+  }
+  if (wilds.length >= 2) for (const ws of subsetsOfSize(wilds, 2, 10)) out.push(ws);
+  if (wilds.length >= 3) for (const ws of subsetsOfSize(wilds, 3, 10)) out.push(ws);
+
+  const needFives = !table || table.kind >= KIND.mixedStraight;
+  if (needFives) {
+    const faceMap = {};
+    faces.forEach((f) => {
+      faceMap[f] = by[f];
+    });
+    for (const five of buildFiveCandidates(hand, wilds, faceMap)) out.push(five);
+  }
+
+  const seen = new Set();
+  const result = [];
+  for (const cards of out) {
+    if (cards.length > 5 || cards.length < 1) continue;
+    const key = cards
+      .map((c) => c.id)
+      .sort()
+      .join(',');
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const c = combo(cards, trump);
+    if (c && beats(c, table)) result.push({ cards, c });
+  }
+  return result.sort(
+    (a, b) => moveCost(a, hand) - moveCost(b, hand) || a.c.kind - b.c.kind || a.c.rank - b.c.rank
+  );
+}
+
+function countWilds(cards) {
+  return (cards || []).filter(isWild).length;
+}
+
+function wildSpendCost(opt) {
+  const cards = opt?.cards || [];
+  const w = countWilds(cards);
+  if (w === 0) return 0;
+  if (cards.every(isWild)) return 0;
+  const c = opt.c;
+  if (!c || c.kind === KIND.single) return 0;
+
+  if (c.kind === KIND.pair || c.kind === KIND.triple) {
+    const nat = c.face != null ? naturalPower(c.face) : -1;
+    if (nat < 0) return w * 40;
+    if (nat < 8) return w * (36 + (8 - nat) * 10);
+    if (nat < 11) return w * 14;
+    return w * 5;
+  }
+
+  if (c.kind >= KIND.fourPlus) return w * 3;
+  if (c.kind >= KIND.fullHouse) return (c.rank || 0) < 60 ? w * 16 : w * 6;
+  if (c.kind >= KIND.mixedStraight) return (c.rank || 0) < 50 ? w * 22 : w * 10;
+  return w * 18;
+}
+
+/** Cost of breaking hand structure. Higher = worse. */
+function shapeBreakCost(opt, hand) {
+  if (!opt?.cards?.length || !hand?.length) return 0;
+  const used = new Set(opt.cards.map((c) => c.id));
+  const c = opt.c;
+  const by = {};
+  hand.forEach((card) => {
+    if (isWild(card)) return;
+    by[card.r] = (by[card.r] || 0) + 1;
+  });
+  const after = { ...by };
+  for (const card of opt.cards) {
+    if (isWild(card)) continue;
+    after[card.r] = (after[card.r] || 0) - 1;
+  }
+
+  let cost = 0;
+  for (const face of Object.keys(by)) {
+    const before = by[face];
+    const left = after[face] || 0;
+    if (before >= 4 && left < 4) cost += 45 + (before - left) * 8;
+    else if (before >= 3 && left < 3 && c.kind === KIND.single) cost += 28;
+    else if (before >= 3 && left < 3 && c.kind === KIND.pair) cost += 22;
+    else if (before >= 3 && left < 3 && c.kind === KIND.fullHouse && c.face !== face) cost += 18;
+    else if (before >= 2 && left < 2 && c.kind === KIND.single) cost += 16;
+  }
+
+  const bigUsed = opt.cards.filter((x) => x.r === '大怪').length;
+  const smallUsed = opt.cards.filter((x) => x.r === '小怪').length;
+  if (bigUsed && c && c.kind >= KIND.mixedStraight && c.kind < KIND.fourPlus && (c.rank || 0) < 70) {
+    cost += bigUsed * 40;
+  }
+  if (smallUsed && c && c.kind === KIND.fullHouse && (c.rank || 0) < 55) {
+    cost += smallUsed * 18;
+  }
+
+  // Prefer orphan singles / natural small sets
+  if (c?.kind === KIND.single && countWilds(opt.cards) === 0) {
+    const face = opt.cards[0].r;
+    if ((by[face] || 0) === 1) cost -= 4;
+  }
+  return Math.max(0, cost);
+}
+
+function moveCost(opt, hand, persona = DEFAULT_PERSONA) {
+  const wild = wildSpendCost(opt) * (persona.wildBias || 1);
+  const shape = shapeBreakCost(opt, hand) * (persona.weakFiveBias || 1);
+  return wild + shape;
+}
+
+function pickFrom(options, { maxWild = 18, maxShape = 40, force = true, hand = null, persona = DEFAULT_PERSONA, preferMinimalBeat = false, tableRank = 0, eliteScore = false, enemyMin = 99 } = {}) {
+  if (!options?.length) return null;
+  const scored = options.map((o) => {
+    const wild = wildSpendCost(o) * (persona.wildBias || 1);
+    const shape = hand ? shapeBreakCost(o, hand) : 0;
+    const beatSlack =
+      preferMinimalBeat && o.c ? Math.max(0, (o.c.rank || 0) - tableRank) + (o.c.kind || 0) * 2 : 0;
+    let weakFive = 0;
+    if (hand && !preferMinimalBeat && o.cards?.length === 5 && o.c?.kind <= KIND.flush && (o.c.rank || 0) < 55) {
+      weakFive = 25 * (persona.weakFiveBias || 1);
+    }
+    let total = wild + shape + weakFive + beatSlack * 0.15;
+    if (eliteScore && hand) {
+      const left = hand.length - o.cards.length;
+      total -= left === 0 ? 90 : left <= 2 ? 35 : left <= 5 ? 12 : 0;
+      if (o.c?.kind >= KIND.fourPlus && enemyMin > 5) total += 22;
+      if (preferMinimalBeat) total += beatSlack * 0.05;
+      total -= Math.min(8, left === o.cards.length ? 0 : 3); // slight prefer progressing
+    }
+    return { o, wild, shape, total };
+  });
+  scored.sort((a, b) => a.total - b.total || a.o.c.kind - b.o.c.kind || a.o.c.rank - b.o.c.rank);
+  const fit = scored.filter((x) => x.wild <= maxWild && x.shape <= maxShape);
+  if (fit.length) return fit[0].o;
+  return force ? scored[0].o : null;
+}
+
+function assignRoles(r) {
+  for (const team of ['red', 'blue']) {
+    const seats = r.players
+      .map((p, i) => ({ p, i, team: teamOf(i) }))
+      .filter((x) => x.team === team)
+      .map((x) => ({
+        ...x,
+        score: handStrength(x.p.hand, r.trump),
+        elite: !!personaFor(x.p.name).elite,
+      }))
+      .sort((a, b) => {
+        if (a.elite !== b.elite) return a.elite ? -1 : 1;
+        return b.score - a.score;
+      });
+    seats.forEach((x, idx) => {
+      x.p.role = idx === 0 ? 'main' : 'support';
+    });
+  }
+}
+
+function enemyShortest(r, myTeam) {
+  let min = 99;
+  r.players.forEach((p, i) => {
+    if (teamOf(i) === myTeam || r.ranking.includes(p.id)) return;
+    min = Math.min(min, p.hand.length);
+  });
+  return min;
+}
+
+function feedKindForCount(n) {
+  if (n >= 11) return null;
+  if (n === 10) return 5;
+  if (n === 9 || n === 7 || n === 4 || n === 2) return 2;
+  if (n === 8) return 3;
+  if (n === 6 || n === 3 || n === 1) return 1;
+  if (n === 5) return 5;
+  return null;
+}
+
+function mainPartner(r, seat) {
+  const myTeam = teamOf(seat);
+  for (const off of [2, 4]) {
+    const i = (seat + off) % 6;
+    const p = r.players[i];
+    if (teamOf(i) === myTeam && p.role === 'main' && !r.ranking.includes(p.id)) {
+      return { seat: i, p, team: myTeam };
+    }
+  }
+  return null;
+}
+
+function racingPartner(r, seat) {
+  const myTeam = teamOf(seat);
+  let best = null;
+  r.players.forEach((p, i) => {
+    if (i === seat || teamOf(i) !== myTeam || r.ranking.includes(p.id)) return;
+    if (
+      !best ||
+      p.hand.length < best.p.hand.length ||
+      (p.hand.length === best.p.hand.length && p.role === 'main' && best.p.role !== 'main')
+    ) {
+      best = { seat: i, p, team: myTeam };
+    }
+  });
+  return best;
+}
+
+function isStrongFive(c) {
+  return c && c.kind >= KIND.fullHouse;
+}
+
+function hasStrongReturn(options) {
+  return options.some(
+    (o) => o.c.kind >= KIND.fourPlus || (o.c.kind === KIND.single && o.c.rank >= 90)
+  );
+}
+
+function pickCtx(r, p, persona) {
+  return { hand: p.hand, persona };
+}
+
+function pickLead(options, r, p, seat, persona) {
+  if (!options.length) return null;
+  const personaX = persona || personaFor(p.name);
+  const elite = !!personaX.elite;
+  const ctx = pickCtx(r, p, personaX);
+  const myTeam = teamOf(seat);
+  const main = mainPartner(r, seat);
+  const race = racingPartner(r, seat);
+  const enemyMin = enemyShortest(r, myTeam);
+  const soft = {
+    maxWild: elite ? 8 : 12,
+    maxShape: elite ? 18 : 28,
+    force: false,
+    eliteScore: elite,
+    enemyMin,
+    ...ctx,
+  };
+  const hard = {
+    maxWild: elite ? 12 : 18,
+    maxShape: elite ? 28 : 45,
+    force: true,
+    eliteScore: elite,
+    enemyMin,
+    ...ctx,
+  };
+  const emergency = {
+    maxWild: 999,
+    maxShape: 999,
+    force: true,
+    eliteScore: elite,
+    enemyMin,
+    ...ctx,
+  };
+
+  const fives = options.filter((o) => o.cards.length === 5);
+  const midFives = fives.filter((o) => o.c.kind <= KIND.flush && o.c.rank >= 55 && o.c.rank < 75);
+  const strongFives = fives.filter((o) => isStrongFive(o.c));
+  const pairs = options.filter((o) => o.c.kind === KIND.pair);
+  const triples = options.filter((o) => o.c.kind === KIND.triple);
+  const singles = options.filter((o) => o.c.kind === KIND.single);
+  const smallSingles = singles.filter(
+    (o) => o.c.rank < 60 && countWilds(o.cards) === 0 && shapeBreakCost(o, p.hand) < (elite ? 8 : 12)
+  );
+  const midPairs = pairs.filter((o) => o.c.rank < 70 && shapeBreakCost(o, p.hand) < (elite ? 12 : 20));
+  const softTriples = triples.filter((o) => o.c.rank < 75 && shapeBreakCost(o, p.hand) < (elite ? 14 : 25));
+  const nonBomb = options.filter((o) => o.c.kind < KIND.fourPlus);
+  const suppressAt = elite ? 7 : 5;
+  const mode = enemyMin <= 3 ? emergency : soft;
+
+  if (enemyMin <= suppressAt) {
+    if (enemyMin === 1) {
+      return (
+        pickFrom(strongFives, mode) ||
+        pickFrom(fives, mode) ||
+        pickFrom(pairs, mode) ||
+        pickFrom(triples, mode) ||
+        pickFrom(nonBomb, hard) ||
+        pickFrom(options, hard)
+      );
+    }
+    if (enemyMin === 2) {
+      return (
+        pickFrom(triples, mode) ||
+        pickFrom(strongFives, mode) ||
+        pickFrom(fives.filter((o) => o.c.kind >= KIND.flush), mode) ||
+        pickFrom(smallSingles, soft) ||
+        pickFrom(nonBomb, hard) ||
+        pickFrom(options, hard)
+      );
+    }
+    if (enemyMin <= 3) {
+      return (
+        pickFrom(midFives, mode) ||
+        pickFrom(pairs, mode) ||
+        pickFrom(smallSingles, soft) ||
+        pickFrom(nonBomb, hard) ||
+        pickFrom(options, hard)
+      );
+    }
+    return (
+      pickFrom(midPairs, soft) ||
+      pickFrom(smallSingles, soft) ||
+      pickFrom(midFives, soft) ||
+      pickFrom(nonBomb, hard) ||
+      pickFrom(options, hard)
+    );
+  }
+
+  const feedTarget =
+    race && race.p.hand.length <= 10 ? race : main && main.p.hand.length <= 12 ? main : null;
+  if (p.role === 'support' && feedTarget) {
+    const pref = feedKindForCount(feedTarget.p.hand.length);
+    if (pref === 5) {
+      const five =
+        pickFrom(midFives, soft) ||
+        pickFrom(
+          fives.filter((o) => !isStrongFive(o.c) && o.c.rank >= 50),
+          soft
+        );
+      if (five) return five;
+    }
+    if (pref === 3) {
+      const t = pickFrom(softTriples, soft) || pickFrom(triples, soft);
+      if (t) return t;
+    }
+    if (pref === 2) {
+      const pr = pickFrom(midPairs, soft) || pickFrom(pairs, soft);
+      if (pr) return pr;
+    }
+    if (pref === 1) {
+      const s =
+        pickFrom(smallSingles, soft) ||
+        pickFrom(
+          singles.filter((o) => countWilds(o.cards) === 0),
+          soft
+        );
+      if (s) return s;
+    }
+    if (feedTarget.p.hand.length <= 12) {
+      const s = pickFrom(smallSingles, soft) || pickFrom(midPairs, soft);
+      if (s) return s;
+    }
+  }
+
+  if (p.hand.length >= 18) {
+    const canProbeFive =
+      !elite &&
+      p.role === 'main' &&
+      midFives.length &&
+      (hasStrongReturn(options) || strongFives.length);
+    if (canProbeFive) {
+      const five = pickFrom(midFives, soft);
+      if (five) return five;
+    }
+    const pr = pickFrom(midPairs, soft);
+    if (pr) return pr;
+    const s = pickFrom(smallSingles, soft);
+    if (s) return s;
+  }
+
+  if ((p.role === 'main' || elite) && p.hand.length <= 10) {
+    const pref = feedKindForCount(p.hand.length);
+    if (pref === 5) {
+      const five = pickFrom(strongFives, soft) || pickFrom(midFives, soft);
+      if (five) return five;
+    }
+    if (pref === 3) {
+      const t = pickFrom(triples, soft);
+      if (t) return t;
+    }
+    if (pref === 2) {
+      const pr = pickFrom(pairs, soft);
+      if (pr) return pr;
+    }
+    if (pref === 1) {
+      const s =
+        pickFrom(
+          singles.filter((o) => countWilds(o.cards) === 0),
+          soft
+        ) || pickFrom(singles, soft);
+      if (s) return s;
+    }
+  }
+
+  const safe = nonBomb.filter(
+    (o) =>
+      o.cards.length !== 5 ||
+      isStrongFive(o.c) ||
+      (!elite && p.role === 'main' && o.c.kind <= KIND.flush && o.c.rank >= 55 && o.c.rank < 70)
+  );
+  return pickFrom(safe.length ? safe : nonBomb.length ? nonBomb : options, hard);
+}
+
+function pickBeat(options, r, p, seat, tableOwnerTeam, persona, allowEatTeammate = false) {
+  if (!options.length) return null;
+  const personaX = persona || personaFor(p.name);
+  const elite = !!personaX.elite;
+  const ctx = pickCtx(r, p, personaX);
+  const myTeam = teamOf(seat);
+  const isEnemy = tableOwnerTeam !== myTeam;
+  const owner = r.players.find((x) => x.id === r.table.player);
+  const ownerCount = owner?.hand.length ?? 99;
+  const tableLen = r.table?.cards?.length || 0;
+  const tableRank = r.table?.combo?.rank ?? 0;
+  const enemyMin = enemyShortest(r, myTeam);
+  const nonBomb = options.filter((o) => o.c.kind < KIND.fourPlus);
+  const beatOpts = { ...ctx, preferMinimalBeat: true, tableRank, eliteScore: elite, enemyMin };
+
+  if (!isEnemy) {
+    if (owner && personaFor(owner.name).elite) return null;
+    if (ownerCount <= 3) return null;
+    const main = mainPartner(r, seat);
+    const race = racingPartner(r, seat);
+    const partner = race && race.p.hand.length <= 10 ? race : main;
+    const takeToStop = enemyMin <= 3 && ownerCount <= 2;
+    const takeForFeed =
+      p.role === 'support' &&
+      partner &&
+      partner.p.hand.length <= 8 &&
+      ownerCount > 5 &&
+      tableLen === 1 &&
+      tableRank < 55;
+    if (allowEatTeammate && !takeForFeed && !takeToStop) {
+      return pickFrom(nonBomb, { maxWild: 25, maxShape: 50, force: true, ...beatOpts });
+    }
+    if (!takeForFeed && !takeToStop) return null;
+    return pickFrom(nonBomb, { maxWild: 8, maxShape: 20, force: true, ...beatOpts });
+  }
+
+  if (enemyMin <= 3 || ownerCount <= 3) {
+    return pickFrom(options, { maxWild: 999, maxShape: 999, force: true, ...beatOpts });
+  }
+  // Elite: press enemy whenever a non-bomb beat is reasonable
+  if (elite) {
+    const press =
+      pickFrom(nonBomb, { maxWild: 16, maxShape: 28, force: false, ...beatOpts }) ||
+      pickFrom(nonBomb, { maxWild: 24, maxShape: 36, force: false, ...beatOpts });
+    if (press) return press;
+    if (ownerCount <= 12 || enemyMin <= 7) {
+      return pickFrom(options, { maxWild: 36, maxShape: 50, force: false, ...beatOpts });
+    }
+    return null;
+  }
+  const pool = ownerCount > 8 && p.role === 'main' ? nonBomb : nonBomb.length ? nonBomb : options;
+  return pickFrom(pool, { maxWild: 18, maxShape: 32, force: false, ...beatOpts });
+}
+
+function sillyPick(options, hand) {
+  if (!options.length) return null;
+  const ranked = [...options].sort((a, b) => moveCost(b, hand) - moveCost(a, hand));
+  const pool = ranked.slice(0, Math.max(1, Math.ceil(ranked.length * 0.35)));
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
+function botMove(r, p) {
+  if (!r.started || !p?.hand) return;
+  const seat = r.players.indexOf(p);
+  if (seat < 0 || r.players[r.turn]?.id !== p.id) return;
+  const persona = effectivePersona(r, p);
+  const tableCombo = r.table?.combo || null;
+  let options = [];
+  try {
+    options = candidates(p.hand, r.trump, tableCombo);
+  } catch {
+    options = [];
+  }
+
+  const mistake = !persona.elite && roll(persona.mistakeRate);
+
+  if (!tableCombo) {
+    if (!options.length) {
+      if (!p.hand.length) {
+        next(r);
+        return;
+      }
+      const sorted = sort([...p.hand], r.trump);
+      play(r, p, [sorted[sorted.length - 1].id]);
+      return;
+    }
+    let lead = pickLead(options, r, p, seat, persona) || options[0];
+    if (mistake) lead = sillyPick(options, p.hand) || lead;
+    play(r, p, lead.cards.map((c) => c.id));
+    return;
+  }
+
+  const ownerIdx = r.players.findIndex((x) => x.id === r.table.player);
+  const ownerTeam = teamOf(ownerIdx);
+  const owner = r.players[ownerIdx];
+  const ownerElite = owner ? !!personaFor(owner.name).elite : false;
+  const eat =
+    !persona.elite &&
+    !ownerElite &&
+    ownerTeam === teamOf(seat) &&
+    roll(persona.eatTeammateRate);
+  let choice = pickBeat(options, r, p, seat, ownerTeam, persona, eat);
+  if (mistake && options.length) {
+    if (choice) choice = sillyPick(options, p.hand) || choice;
+    else if (ownerTeam !== teamOf(seat) || eat) choice = sillyPick(options, p.hand);
+  }
+  if (choice) play(r, p, choice.cards.map((c) => c.id));
+  else pass(r, p);
+}
+
+module.exports = {
+  PERSONAS,
+  personaFor,
+  intelFor,
+  handStrength,
+  candidates,
+  countWilds,
+  wildSpendCost,
+  shapeBreakCost,
+  moveCost,
+  pickFrom,
+  assignRoles,
+  feedKindForCount,
+  enemyShortest,
+  pickLead,
+  pickBeat,
+  botMove,
+};
