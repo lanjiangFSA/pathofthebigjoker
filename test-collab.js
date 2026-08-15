@@ -18,6 +18,8 @@ const {
   candidates,
   wildSpendCost,
   countWilds,
+  shapeBreakCost,
+  personaFor,
 } = require('./logic');
 
 function C(r, s = '♠') {
@@ -110,6 +112,11 @@ check('feed teammate: support leads preferred length when main short', () => {
   const main = r.players[2];
   support.role = 'support';
   main.role = 'main';
+  // Keep other seats fat so racingPartner locks onto main (8)
+  r.players.forEach((p, i) => {
+    if (i === 0 || i === 2) return;
+    p.hand = Array.from({ length: 20 }, (_, k) => C(String((k % 8) + 3)));
+  });
   main.hand = main.hand.slice(0, 8); // prefer 3-way feed
   support.hand = [
     C('3'),
@@ -225,6 +232,46 @@ check('careful five: support avoids weak five open early', () => {
   const lead = pickLead(opts, r, support, 0);
   assert.ok(lead);
   assert.ok(lead.cards.length !== 5 || lead.c.kind >= KIND.fullHouse, 'no weak five open as support');
+});
+
+check('shapeBreakCost: breaking triple for single is costly', () => {
+  const hand = [C('9'), C('9', '♥'), C('9', '♦'), C('3'), C('4'), C('5')];
+  const breakTrip = { cards: [hand[0]], c: combo([hand[0]], '2') };
+  const orphan = { cards: [hand[3]], c: combo([hand[3]], '2') };
+  assert.ok(shapeBreakCost(breakTrip, hand) > shapeBreakCost(orphan, hand));
+});
+
+check('personaFor: 十三点 has high mistakeRate tendency', () => {
+  const s = personaFor('十三点');
+  const d = personaFor('阿根');
+  const steady = personaFor('老克勒');
+  assert.ok(s.mistakeRate > d.mistakeRate);
+  assert.ok(s.mistakeRate > steady.mistakeRate);
+  assert.ok(s.eatTeammateRate > steady.eatTeammateRate);
+});
+
+check('elite 麒麟/朝日 are intel 5 and never mistake', () => {
+  const { intelFor } = require('./logic');
+  for (const name of ['麒麟', '朝日']) {
+    const p = personaFor(name);
+    assert.strictEqual(intelFor(name), 5);
+    assert.ok(p.elite);
+    assert.strictEqual(p.mistakeRate, 0);
+    assert.strictEqual(p.eatTeammateRate, 0);
+  }
+});
+
+check('placeEliteBots: 麒麟 on host team, 朝日 on foe', () => {
+  const { placeEliteBots } = require('./logic');
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const hostSeat = r.players.findIndex((p) => p.id === r.host);
+  const myTeam = teamOf(hostSeat);
+  const foe = myTeam === 'red' ? 'blue' : 'red';
+  assert.ok(r.players.some((p, i) => p.bot && p.name === '麒麟' && teamOf(i) === myTeam));
+  assert.ok(r.players.some((p, i) => p.bot && p.name === '朝日' && teamOf(i) === foe));
+  void placeEliteBots;
 });
 
 check('multi-round AI game completes', () => {

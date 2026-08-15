@@ -167,6 +167,12 @@ body:has(#table:not([hidden])) main{
 .seat.banker .avatar{outline:2px solid #ffb84d}
 @keyframes pulse{50%{transform:scale(1.1)}}
 .seat .name{font-weight:700;color:#f4f8ff;max-width:84px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.seat .intel{
+  margin-top:1px;font-size:9px;font-weight:800;color:#9fb2ca;letter-spacing:0.02em;
+  line-height:1.1;
+}
+.seat .intel .intel-score{color:#f4c95d}
+.seat.elite5 .intel .intel-score,.seat .intel[title="智能 5/5"] .intel-score{color:#ffd36a}
 .seat.me .name{color:#ffdb70}
 .seat .meta{font-size:9px;color:#9fb2ca;min-height:0}
 .seat .badge-count{

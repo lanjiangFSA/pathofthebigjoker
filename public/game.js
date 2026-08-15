@@ -322,7 +322,7 @@ function renderSeats() {
     const d = document.createElement('div');
     const isTurn = state.started && state.turn === seat;
     const isBanker = !!p.banker || seat === state.bankerSeat;
-    d.className = `seat ${p.team} ${p.id === me ? 'me' : ''} ${isTurn ? 'active' : ''} ${isBanker ? 'banker' : ''}`;
+    d.className = `seat ${p.team} ${p.id === me ? 'me' : ''} ${isTurn ? 'active' : ''} ${isBanker ? 'banker' : ''} ${p.bot && p.intel === 5 ? 'elite5' : ''}`;
     const count = seatCountText(p);
     const tags = [
       isBanker ? '庄' : null,
@@ -337,6 +337,10 @@ function renderSeats() {
       host && !state.started && !p.bot && p.id !== me
         ? `<button type="button" class="kick-btn" data-kick="${p.id}">踢</button>`
         : '';
+    const intelHtml =
+      p.bot && p.intel != null
+        ? `<div class="intel" title="智能 ${p.intel}/5"><span class="intel-score">${p.intel}</span>/5</div>`
+        : '';
 
     const latest = byPlayer.get(p.id);
     const playHtml = latest
@@ -347,6 +351,7 @@ function renderSeats() {
       <div class="seat-timer" data-seat="${seat}" hidden><div class="clock-face">0</div></div>
       <div class="avatar">${initial}${count ? `<span class="badge-count">${count}</span>` : ''}${isBanker ? '<span class="badge-banker">庄</span>' : ''}</div>
       <div class="name">${p.name}</div>
+      ${intelHtml}
       <div class="meta">${tags}</div>
       <div class="pass-flag ${passed.has(p.id) ? 'on' : ''}">${passed.has(p.id) ? '不出' : ''}</div>
       <div class="seat-plays">${playHtml}</div>
