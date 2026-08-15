@@ -375,15 +375,16 @@ check('isSureWinCards joker shapes', () => {
       { r: '大怪', s: '★' },
     ])
   );
+  // Mixed 大+小 triples rank as 小怪 — beatable by 三大怪, not sure-win
   assert.ok(
-    isSureWinCards([
+    !isSureWinCards([
       { r: '大怪', s: '★' },
       { r: '小怪', s: '★' },
       { r: '小怪', s: '★' },
     ])
   );
   assert.ok(
-    isSureWinCards([
+    !isSureWinCards([
       { r: '大怪', s: '★' },
       { r: '大怪', s: '★' },
       { r: '小怪', s: '★' },

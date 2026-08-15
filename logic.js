@@ -139,7 +139,8 @@ function groupSame(cards, trump) {
   const normals = cards.filter((c) => !isWild(c));
   const wilds = cards.filter((c) => isWild(c));
   if (!normals.length) {
-    const face = wilds.some((c) => c.r === '大怪') ? '大怪' : '小怪';
+    // Pure jokers: face = weakest joker (大+小 → 对小怪). 小怪 cannot become 大怪.
+    const face = wilds.some((c) => c.r === '小怪') ? '小怪' : '大怪';
     return { face, rank: cardPower(face, trump) };
   }
   if (new Set(normals.map((c) => c.r)).size > 1) return null;
@@ -349,13 +350,34 @@ function stripBots(r) {
 }
 
 function addBots(r) {
-  const pool = shuffleNames(botNames);
+  const reserved = new Set(['麒麟', '朝日']);
+  const pool = shuffleNames(botNames.filter((n) => !reserved.has(n)));
   let n = 0;
   while (r.players.length < 6) {
     let name = pool[n++ % pool.length];
     while (r.players.some((p) => p.name === name)) name = `${name}${Math.ceil(Math.random() * 9)}`;
     addPlayer(r, name, true);
   }
+  placeEliteBots(r);
+}
+
+/** 我方(房主/首位真人队)必有麒麟，对方必有朝日。 */
+function placeEliteBots(r) {
+  const humans = r.players.filter((p) => !p.bot);
+  const anchor = humans.find((p) => p.id === r.host) || humans[0];
+  const myTeam = anchor ? teamOf(r.players.indexOf(anchor)) : 'red';
+  const foeTeam = myTeam === 'red' ? 'blue' : 'red';
+  const allyBot = r.players.find((p, i) => p.bot && teamOf(i) === myTeam);
+  const foeBot = r.players.find((p, i) => p.bot && teamOf(i) === foeTeam);
+  if (allyBot) allyBot.name = '麒麟';
+  if (foeBot) foeBot.name = '朝日';
+  // Avoid duplicate elite names on same team leftovers
+  r.players.forEach((p, i) => {
+    if (!p.bot || p === allyBot || p === foeBot) return;
+    if (p.name === '麒麟' || p.name === '朝日') {
+      p.name = `阿福${(i % 9) + 1}`;
+    }
+  });
 }
 
 function snapshotTable(table) {
@@ -484,230 +506,6 @@ function subsetsOfSize(arr, size, limit = 800) {
   return out;
 }
 
-function handStrength(hand, trump) {
-  let score = 0;
-  score += hand.filter(isWild).length * 8;
-  score += hand.filter((c) => c.r === trump).length * 5;
-  score += hand.filter((c) => c.r === 'A' || c.r === 'K').length * 2;
-  const by = {};
-  hand.forEach((c) => {
-    if (isWild(c)) return;
-    by[c.r] = (by[c.r] || 0) + 1;
-  });
-  const counts = Object.values(by);
-  score += counts.filter((n) => n >= 5).length * 12;
-  score += counts.filter((n) => n === 4).length * 8;
-  score += counts.filter((n) => n === 3).length * 4;
-  score += counts.filter((n) => n === 2).length * 2;
-  // Prefer formed fives (整齐牌型) when assigning main/support
-  try {
-    const fives = candidates(hand, trump, null).filter((o) => o.cards.length === 5);
-    if (fives.some((o) => o.c.kind >= KIND.straightFlush)) score += 16;
-    else if (fives.some((o) => o.c.kind >= KIND.fourPlus)) score += 12;
-    else if (fives.some((o) => o.c.kind >= KIND.fullHouse)) score += 8;
-    else if (fives.length) score += 3;
-  } catch {
-    /* ignore */
-  }
-  return score;
-}
-
-function buildFiveCandidates(hand, wilds, by) {
-  const out = [];
-  const faces = Object.keys(by);
-  // 五同 / 四带一 / 三带两 from counts + wilds
-  for (const f of faces) {
-    const list = by[f];
-    for (let w = 0; w <= Math.min(wilds.length, 5); w++) {
-      if (list.length + w >= 5 && list.length >= 1) {
-        for (const body of subsetsOfSize(list, Math.min(list.length, 5 - w), 8)) {
-          for (const ws of subsetsOfSize(wilds, w, 6)) {
-            if (body.length + ws.length === 5) out.push([...body, ...ws]);
-          }
-        }
-      }
-    }
-    // 四带一: 4 of f + 1 kicker
-    for (let w = 0; w <= Math.min(wilds.length, 3); w++) {
-      const need = Math.max(0, 4 - list.length);
-      if (need > w) continue;
-      const take = Math.min(list.length, 4);
-      for (const body of subsetsOfSize(list, take, 6)) {
-        for (const ws of subsetsOfSize(wilds, w, 4)) {
-          const used = body.length + ws.length;
-          if (used > 5) continue;
-          const remain = 5 - used;
-          if (remain === 1) {
-            const kickers = hand.filter((c) => c.id !== body[0]?.id && !body.includes(c) && !ws.includes(c));
-            for (const k of kickers.slice(0, 12)) out.push([...body, ...ws, k]);
-          } else if (remain === 0 && body.length + ws.length === 5) {
-            out.push([...body, ...ws]);
-          }
-        }
-      }
-    }
-  }
-  // 三带两
-  for (let i = 0; i < faces.length; i++) {
-    for (let j = 0; j < faces.length; j++) {
-      if (i === j) continue;
-      const a = by[faces[i]];
-      const b = by[faces[j]];
-      for (let w = 0; w <= wilds.length; w++) {
-        for (let na = Math.min(a.length, 3); na >= 1; na--) {
-          for (let nb = Math.min(b.length, 2); nb >= 1; nb--) {
-            if (na + nb + w !== 5) continue;
-            if (na + Math.min(w, 3 - na) < 3) continue;
-            for (const ta of subsetsOfSize(a, na, 4)) {
-              for (const tb of subsetsOfSize(b, nb, 4)) {
-                for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...ta, ...tb, ...ws]);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  // Straights / flushes: sample windows with available ranks (bounded)
-  const normals = hand.filter((c) => !isWild(c));
-  for (const win of STRAIGHT_WINDOWS) {
-    const picks = [];
-    let miss = 0;
-    for (const face of win) {
-      const card = normals.find((c) => c.r === face && !picks.includes(c));
-      if (card) picks.push(card);
-      else miss++;
-    }
-    if (miss <= wilds.length && picks.length + Math.min(miss, wilds.length) === 5) {
-      out.push([...picks, ...wilds.slice(0, miss)]);
-    }
-  }
-  // Same-suit flushes (non-straight): take 5 of one suit + wilds
-  for (const s of suits) {
-    const suited = normals.filter((c) => c.s === s);
-    for (let w = 0; w <= Math.min(wilds.length, 4); w++) {
-      if (suited.length + w < 5) continue;
-      for (const five of subsetsOfSize(suited, 5 - w, 10)) {
-        for (const ws of subsetsOfSize(wilds, w, 4)) out.push([...five, ...ws]);
-      }
-    }
-  }
-  if (wilds.length >= 5) for (const ws of subsetsOfSize(wilds, 5, 5)) out.push(ws);
-  return out;
-}
-
-function candidates(hand, trump, table) {
-  const out = [];
-  for (const c of hand) out.push([c]);
-  const by = {};
-  hand.forEach((c) => {
-    const k = isWild(c) ? 'wild' : c.r;
-    (by[k] ??= []).push(c);
-  });
-  const wilds = by.wild || [];
-  const faces = Object.keys(by).filter((k) => k !== 'wild');
-
-  for (const f of faces) {
-    const list = by[f];
-    for (let w = 0; w <= wilds.length; w++) {
-      for (let n = 1; n <= list.length; n++) {
-        if (n + w === 2) {
-          for (const pair of subsetsOfSize(list, n, 20))
-            for (const ws of subsetsOfSize(wilds, w, 10)) out.push([...pair, ...ws]);
-        }
-        if (n + w === 3) {
-          for (const trip of subsetsOfSize(list, n, 15))
-            for (const ws of subsetsOfSize(wilds, w, 8)) out.push([...trip, ...ws]);
-        }
-      }
-    }
-  }
-  if (wilds.length >= 2) for (const ws of subsetsOfSize(wilds, 2, 10)) out.push(ws);
-  if (wilds.length >= 3) for (const ws of subsetsOfSize(wilds, 3, 10)) out.push(ws);
-
-  const needFives = !table || table.kind >= KIND.mixedStraight;
-  if (needFives) {
-    const faceMap = {};
-    faces.forEach((f) => {
-      faceMap[f] = by[f];
-    });
-    for (const five of buildFiveCandidates(hand, wilds, faceMap)) out.push(five);
-  }
-
-  const seen = new Set();
-  const result = [];
-  for (const cards of out) {
-    if (cards.length > 5 || cards.length < 1) continue;
-    const key = cards
-      .map((c) => c.id)
-      .sort()
-      .join(',');
-    if (seen.has(key)) continue;
-    seen.add(key);
-    const c = combo(cards, trump);
-    if (c && beats(c, table)) result.push({ cards, c });
-  }
-  // Prefer natural plays; 大小怪 padded weak pairs/triples sink to the end
-  return result.sort(
-    (a, b) => wildSpendCost(a) - wildSpendCost(b) || a.c.kind - b.c.kind || a.c.rank - b.c.rank
-  );
-}
-
-function countWilds(cards) {
-  return (cards || []).filter(isWild).length;
-}
-
-/**
- * Cost of spending 大小怪 on this option. Higher = worse.
- * Pure-joker plays cost 0; 5+大王 as「对5」is very expensive.
- */
-function wildSpendCost(opt) {
-  const cards = opt?.cards || [];
-  const w = countWilds(cards);
-  if (w === 0) return 0;
-  if (cards.every(isWild)) return 0;
-  const c = opt.c;
-  if (!c || c.kind === KIND.single) return 0;
-
-  if (c.kind === KIND.pair || c.kind === KIND.triple) {
-    const nat = c.face != null ? naturalPower(c.face) : -1;
-    if (nat < 0) return w * 40;
-    // Below J: precious jokers must not pad weak sets (e.g. 5+大怪)
-    if (nat < 8) return w * (36 + (8 - nat) * 10);
-    if (nat < 11) return w * 14; // J/Q/K
-    return w * 5; // A / 2
-  }
-
-  if (c.kind >= KIND.fourPlus) return w * 3;
-  if (c.kind >= KIND.fullHouse) return (c.rank || 0) < 60 ? w * 16 : w * 6;
-  if (c.kind >= KIND.mixedStraight) return (c.rank || 0) < 50 ? w * 22 : w * 10;
-  return w * 18;
-}
-
-/** Pick best option: low wild waste, then existing kind/rank order. */
-function pickFrom(options, { maxWild = 18, force = true } = {}) {
-  if (!options?.length) return null;
-  const ranked = [...options].sort(
-    (a, b) => wildSpendCost(a) - wildSpendCost(b) || a.c.kind - b.c.kind || a.c.rank - b.c.rank
-  );
-  const fit = ranked.filter((o) => wildSpendCost(o) <= maxWild);
-  if (fit.length) return fit[0];
-  return force ? ranked[0] : null;
-}
-
-function assignRoles(r) {
-  for (const team of ['red', 'blue']) {
-    const seats = r.players
-      .map((p, i) => ({ p, i, team: teamOf(i) }))
-      .filter((x) => x.team === team)
-      .map((x) => ({ ...x, score: handStrength(x.p.hand, r.trump) }))
-      .sort((a, b) => b.score - a.score);
-    seats.forEach((x, idx) => {
-      x.p.role = idx === 0 ? 'main' : 'support';
-    });
-  }
-}
-
 function activeCount(r) {
   return r.players.filter((p) => !r.ranking.includes(p.id)).length;
 }
@@ -724,17 +522,14 @@ function isJokerRank(r) {
   return r === '大怪' || r === '小怪';
 }
 
-/** Unbeatable joker shapes from issue.log — skip pass circle. */
+/** Unbeatable joker shapes — skip pass circle. Mixed 大+小 triples rank as 小怪 and are beatable. */
 function isSureWinCards(cards) {
   if (!cards?.length || ![1, 2, 3].includes(cards.length)) return false;
   if (!cards.every((c) => isJokerRank(c.r))) return false;
   const big = cards.filter((c) => c.r === '大怪').length;
-  const small = cards.filter((c) => c.r === '小怪').length;
   if (cards.length === 1 && big === 1) return true;
   if (cards.length === 2 && big === 2) return true;
   if (cards.length === 3 && big === 3) return true;
-  if (cards.length === 3 && big === 1 && small === 2) return true;
-  if (cards.length === 3 && big === 2 && small === 1) return true;
   return false;
 }
 
@@ -1024,7 +819,7 @@ function start(r) {
   r.players.forEach((p, i) => {
     p.hand = sort(d.slice(i * 27, i * 27 + 27), r.trump);
   });
-  assignRoles(r);
+  require('./ai').assignRoles(r);
   r.started = true;
   r.matchOver = false;
   r.turn = r.leadSeat;
@@ -1117,271 +912,10 @@ function onlyAiPlaying(r) {
   return !!r.started && !humansStillPlaying(r);
 }
 
-function enemyShortest(r, myTeam) {
-  let min = 99;
-  r.players.forEach((p, i) => {
-    if (teamOf(i) === myTeam || r.ranking.includes(p.id)) return;
-    min = Math.min(min, p.hand.length);
-  });
-  return min;
-}
-
-/** Preferred lead length when feeding a short partner (howtocollabrate 放牌表). */
-function feedKindForCount(n) {
-  if (n >= 11) return null;
-  if (n === 10) return 5;
-  if (n === 9 || n === 7 || n === 4 || n === 2) return 2;
-  if (n === 8) return 3;
-  if (n === 6 || n === 3 || n === 1) return 1;
-  if (n === 5) return 5;
-  return null;
-}
-
-function mainPartner(r, seat) {
-  const myTeam = teamOf(seat);
-  for (const off of [2, 4]) {
-    const i = (seat + off) % 6;
-    const p = r.players[i];
-    if (teamOf(i) === myTeam && p.role === 'main' && !r.ranking.includes(p.id)) {
-      return { seat: i, p, team: myTeam };
-    }
-  }
-  return null;
-}
-
-/** Shortest active teammate — team score > personal race. */
-function racingPartner(r, seat) {
-  const myTeam = teamOf(seat);
-  let best = null;
-  r.players.forEach((p, i) => {
-    if (i === seat || teamOf(i) !== myTeam || r.ranking.includes(p.id)) return;
-    if (
-      !best ||
-      p.hand.length < best.p.hand.length ||
-      (p.hand.length === best.p.hand.length && p.role === 'main' && best.p.role !== 'main')
-    ) {
-      best = { seat: i, p, team: myTeam };
-    }
-  });
-  return best;
-}
-
-function isStrongFive(c) {
-  return c && c.kind >= KIND.fullHouse;
-}
-
-function hasStrongReturn(options) {
-  return options.some(
-    (o) => o.c.kind >= KIND.fourPlus || (o.c.kind === KIND.single && o.c.rank >= 90)
-  );
-}
-
-/**
- * Team-first lead policy (howtocollabrate):
- * suppress short enemies, feed short partners by count, careful five opens.
- */
-function pickLead(options, r, p, seat) {
-  if (!options.length) return null;
-  const myTeam = teamOf(seat);
-  const main = mainPartner(r, seat);
-  const race = racingPartner(r, seat);
-  const enemyMin = enemyShortest(r, myTeam);
-  // Leads: keep 大小怪; only allow mild spend when suppressing short enemy
-  const soft = { maxWild: 12, force: false };
-  const hard = { maxWild: 18, force: true };
-  const emergency = { maxWild: 999, force: true };
-
-  const fives = options.filter((o) => o.cards.length === 5);
-  const midFives = fives.filter((o) => o.c.kind <= KIND.flush && o.c.rank < 70);
-  const strongFives = fives.filter((o) => isStrongFive(o.c));
-  const pairs = options.filter((o) => o.c.kind === KIND.pair);
-  const triples = options.filter((o) => o.c.kind === KIND.triple);
-  const singles = options.filter((o) => o.c.kind === KIND.single);
-  const smallSingles = singles.filter((o) => o.c.rank < 60 && countWilds(o.cards) === 0);
-  const midPairs = pairs.filter((o) => o.c.rank < 70);
-  const softTriples = triples.filter((o) => o.c.rank < 75);
-  const nonBomb = options.filter((o) => o.c.kind < KIND.fourPlus);
-  const mode = enemyMin <= 3 ? emergency : soft;
-
-  if (enemyMin <= 5) {
-    if (enemyMin === 1) {
-      return (
-        pickFrom(fives, mode) ||
-        pickFrom(pairs, mode) ||
-        pickFrom(triples, mode) ||
-        pickFrom(nonBomb, hard) ||
-        pickFrom(options, hard)
-      );
-    }
-    if (enemyMin === 2) {
-      return (
-        pickFrom(triples, mode) ||
-        pickFrom(fives, mode) ||
-        pickFrom(smallSingles, soft) ||
-        pickFrom(nonBomb, hard) ||
-        pickFrom(options, hard)
-      );
-    }
-    if (enemyMin <= 3) {
-      return (
-        pickFrom(midFives, mode) ||
-        pickFrom(pairs, mode) ||
-        pickFrom(smallSingles, soft) ||
-        pickFrom(nonBomb, hard) ||
-        pickFrom(options, hard)
-      );
-    }
-    return (
-      pickFrom(midFives, soft) ||
-      pickFrom(midPairs, soft) ||
-      pickFrom(smallSingles, soft) ||
-      pickFrom(nonBomb, hard) ||
-      pickFrom(options, hard)
-    );
-  }
-
-  const feedTarget =
-    race && race.p.hand.length <= 10 ? race : main && main.p.hand.length <= 12 ? main : null;
-  if (p.role === 'support' && feedTarget) {
-    const pref = feedKindForCount(feedTarget.p.hand.length);
-    if (pref === 5) {
-      const five =
-        pickFrom(midFives, soft) || pickFrom(
-          fives.filter((o) => !isStrongFive(o.c)),
-          soft
-        );
-      if (five) return five;
-    }
-    if (pref === 3) {
-      const t = pickFrom(softTriples, soft) || pickFrom(triples, soft);
-      if (t) return t;
-    }
-    if (pref === 2) {
-      const pr = pickFrom(midPairs, soft) || pickFrom(pairs, soft);
-      if (pr) return pr;
-    }
-    if (pref === 1) {
-      const s = pickFrom(smallSingles, soft) || pickFrom(singles.filter((o) => countWilds(o.cards) === 0), soft);
-      if (s) return s;
-    }
-    if (feedTarget.p.hand.length <= 12) {
-      const s = pickFrom(smallSingles, soft) || pickFrom(midPairs, soft);
-      if (s) return s;
-    }
-  }
-
-  if (p.hand.length >= 18) {
-    const canProbeFive =
-      p.role === 'main' && midFives.length && (hasStrongReturn(options) || strongFives.length);
-    if (canProbeFive) {
-      const five = pickFrom(midFives, soft);
-      if (five) return five;
-    }
-    const pr = pickFrom(midPairs, soft);
-    if (pr) return pr;
-    const s = pickFrom(smallSingles, soft);
-    if (s) return s;
-  }
-
-  if (p.role === 'main' && p.hand.length <= 10) {
-    const pref = feedKindForCount(p.hand.length);
-    if (pref === 5) {
-      const five = pickFrom(strongFives, soft) || pickFrom(midFives, soft);
-      if (five) return five;
-    }
-    if (pref === 3) {
-      const t = pickFrom(triples, soft);
-      if (t) return t;
-    }
-    if (pref === 2) {
-      const pr = pickFrom(pairs, soft);
-      if (pr) return pr;
-    }
-    if (pref === 1) {
-      const s = pickFrom(singles.filter((o) => countWilds(o.cards) === 0), soft) || pickFrom(singles, soft);
-      if (s) return s;
-    }
-  }
-
-  const safe = nonBomb.filter(
-    (o) => o.cards.length !== 5 || isStrongFive(o.c) || (p.role === 'main' && o.c.rank < 70)
-  );
-  return pickFrom(safe.length ? safe : nonBomb.length ? nonBomb : options, hard);
-}
-
-function pickBeat(options, r, p, seat, tableOwnerTeam) {
-  if (!options.length) return null;
-  const myTeam = teamOf(seat);
-  const isEnemy = tableOwnerTeam !== myTeam;
-  const owner = r.players.find((x) => x.id === r.table.player);
-  const ownerCount = owner?.hand.length ?? 99;
-  const tableLen = r.table?.cards?.length || 0;
-  const tableRank = r.table?.combo?.rank ?? 0;
-  const enemyMin = enemyShortest(r, myTeam);
-  const nonBomb = options.filter((o) => o.c.kind < KIND.fourPlus);
-
-  if (!isEnemy) {
-    if (ownerCount <= 3) return null;
-    const main = mainPartner(r, seat);
-    const race = racingPartner(r, seat);
-    const partner = race && race.p.hand.length <= 10 ? race : main;
-    const takeToStop = enemyMin <= 3 && ownerCount <= 2;
-    // 对子/三张/五路尽量不过队友；仅小单可接牌喂主攻
-    const takeForFeed =
-      p.role === 'support' &&
-      partner &&
-      partner.p.hand.length <= 8 &&
-      ownerCount > 5 &&
-      tableLen === 1 &&
-      tableRank < 55;
-    if (!takeForFeed && !takeToStop) return null;
-    // Never spend 大小怪 just to take from teammate
-    return pickFrom(nonBomb, { maxWild: 8, force: true });
-  }
-
-  // Emergency: may spend jokers to stop short enemy; otherwise prefer natural beats / pass
-  if (enemyMin <= 3 || ownerCount <= 3) {
-    return pickFrom(options, { maxWild: 999, force: true });
-  }
-  const pool = ownerCount > 8 && p.role === 'main' ? nonBomb : nonBomb.length ? nonBomb : options;
-  // Prefer pass over 5+大王 style beats on weak tables
-  return pickFrom(pool, { maxWild: 18, force: false });
-}
-
-function botMove(r, p) {
-  if (!r.started || !p?.hand) return;
-  const seat = r.players.indexOf(p);
-  if (seat < 0 || r.players[r.turn]?.id !== p.id) return;
-  const tableCombo = r.table?.combo || null;
-  let options = [];
-  try {
-    options = candidates(p.hand, r.trump, tableCombo);
-  } catch (e) {
-    options = [];
-  }
-  if (!tableCombo) {
-    if (!options.length) {
-      if (!p.hand.length) {
-        next(r);
-        return;
-      }
-      const sorted = sort([...p.hand], r.trump);
-      play(r, p, [sorted[sorted.length - 1].id]);
-      return;
-    }
-    const lead = pickLead(options, r, p, seat) || options[0];
-    play(r, p, lead.cards.map((c) => c.id));
-    return;
-  }
-  const ownerIdx = r.players.findIndex((x) => x.id === r.table.player);
-  const choice = pickBeat(options, r, p, seat, teamOf(ownerIdx));
-  if (choice) play(r, p, choice.cards.map((c) => c.id));
-  else pass(r, p);
-}
-
 function state(r, id) {
   const me = r.players.find((p) => p.id === id);
   const myTeam = me ? teamOf(r.players.indexOf(me)) : null;
+  const { intelFor } = require('./ai');
   const mapTrick = (t) => ({
     playerId: t.playerId,
     name: t.name,
@@ -1430,6 +964,7 @@ function state(r, id) {
       bot: p.bot,
       done: r.ranking.includes(p.id),
       role: p.role,
+      intel: p.bot ? intelFor(p.name) : null,
       teammate: myTeam != null && teamOf(i) === myTeam && p.id !== id,
       banker: i === r.bankerSeat,
     })),
@@ -1441,8 +976,13 @@ module.exports = {
   ranks,
   suits,
   KIND,
+  FACE,
+  STRAIGHT_WINDOWS,
   uid,
   teamOf,
+  isWild,
+  naturalPower,
+  subsetsOfSize,
   deck,
   cardPower,
   sort,
@@ -1460,16 +1000,8 @@ module.exports = {
   play,
   pass,
   settle,
-  candidates,
-  botMove,
-  pickLead,
-  pickBeat,
-  feedKindForCount,
-  wildSpendCost,
-  countWilds,
+  next,
   state,
-  handStrength,
-  assignRoles,
   findStraightWindow,
   pointsToSteps,
   scoreFromPlaces,
@@ -1485,3 +1017,19 @@ module.exports = {
   onlyAiPlaying,
   humansStillPlaying,
 };
+
+// AI lives in ai.js; re-export for server/tests (load after exports to avoid cycles)
+const ai = require('./ai');
+module.exports.candidates = ai.candidates;
+module.exports.botMove = ai.botMove;
+module.exports.pickLead = ai.pickLead;
+module.exports.pickBeat = ai.pickBeat;
+module.exports.feedKindForCount = ai.feedKindForCount;
+module.exports.wildSpendCost = ai.wildSpendCost;
+module.exports.shapeBreakCost = ai.shapeBreakCost;
+module.exports.countWilds = ai.countWilds;
+module.exports.handStrength = ai.handStrength;
+module.exports.assignRoles = ai.assignRoles;
+module.exports.personaFor = ai.personaFor;
+module.exports.intelFor = ai.intelFor;
+module.exports.placeEliteBots = placeEliteBots;

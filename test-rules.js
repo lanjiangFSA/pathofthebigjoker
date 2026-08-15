@@ -52,6 +52,27 @@ check('single pair triple', () => {
   assert.ok(!combo([C('7'), C('8')], '2'));
 });
 
+check('大怪+小怪 pair ranks as 对小怪', () => {
+  const mixed = combo([W('大怪'), W('小怪')], '2');
+  const twoBig = combo([W('大怪'), W('大怪')], '2');
+  const twoSmall = combo([W('小怪'), W('小怪')], '2');
+  assert.ok(mixed);
+  assert.strictEqual(mixed.face, '小怪');
+  assert.strictEqual(mixed.rank, cardPower('小怪', '2'));
+  assert.strictEqual(twoBig.face, '大怪');
+  assert.strictEqual(twoSmall.face, '小怪');
+  assert.ok(beats(twoBig, mixed));
+  assert.ok(!beats(mixed, twoBig));
+  assert.ok(!beats(mixed, twoSmall));
+});
+
+check('mixed joker triple ranks as 小怪 and loses to 三大怪', () => {
+  const mixed = combo([W('大怪'), W('大怪'), W('小怪')], '2');
+  const threeBig = combo([W('大怪'), W('大怪'), W('大怪')], '2');
+  assert.strictEqual(mixed.face, '小怪');
+  assert.ok(beats(threeBig, mixed));
+});
+
 check('333+joker+4 is 四带一 not 三带两', () => {
   const c = combo([C('3'), C('3', '♥'), C('3', '♦'), W(), C('4')], '2');
   assert.strictEqual(c.label, '四带一');
