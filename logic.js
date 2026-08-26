@@ -322,7 +322,57 @@ function newRoom(_opts = {}) {
     matchOver: false,
     turnDeadline: null,
     firstLeadDone: false,
+    aiSense: emptyAiSense(),
   };
+}
+
+function emptyAiSense() {
+  return {
+    teammatePassByLen: { red: {}, blue: {} },
+    played: { big: 0, small: 0, trump: 0, A: 0 },
+  };
+}
+
+function ensureAiSense(r) {
+  if (!r.aiSense) r.aiSense = emptyAiSense();
+  if (!r.aiSense.teammatePassByLen) r.aiSense.teammatePassByLen = { red: {}, blue: {} };
+  if (!r.aiSense.played) r.aiSense.played = { big: 0, small: 0, trump: 0, A: 0 };
+  return r.aiSense;
+}
+
+function noteAiPlay(r, cards) {
+  const sense = ensureAiSense(r);
+  const trump = r.trump || '2';
+  for (const c of cards || []) {
+    if (c.r === '大怪') sense.played.big++;
+    else if (c.r === '小怪') sense.played.small++;
+    else if (c.r === trump) sense.played.trump++;
+    else if (c.r === 'A') sense.played.A++;
+  }
+}
+
+function noteAiPass(r, p) {
+  const sense = ensureAiSense(r);
+  const seat = r.players.indexOf(p);
+  if (seat < 0 || !r.table?.cards?.length) return;
+  const team = teamOf(seat);
+  const len = r.table.cards.length;
+  const bucket = sense.teammatePassByLen[team] || (sense.teammatePassByLen[team] = {});
+  bucket[len] = (bucket[len] || 0) + 1;
+}
+
+function noteAiLeadClear(r, p, cards) {
+  const sense = ensureAiSense(r);
+  const seat = r.players.indexOf(p);
+  if (seat < 0) return;
+  const team = teamOf(seat);
+  const len = cards?.length;
+  if (len && sense.teammatePassByLen[team]) {
+    // Successfully opening/using this length — decay teammate avoid signal
+    if (sense.teammatePassByLen[team][len]) {
+      sense.teammatePassByLen[team][len] = Math.max(0, sense.teammatePassByLen[team][len] - 1);
+    }
+  }
 }
 
 function addPlayer(r, name, bot = false) {
@@ -831,6 +881,7 @@ function start(r) {
   r.ranking = [];
   r.result = null;
   r.firstLeadDone = false;
+  r.aiSense = emptyAiSense();
   armTurn(r);
   const line = teamLineup(r);
   const bankerName = r.players[r.bankerSeat]?.name || '';
@@ -858,10 +909,12 @@ function play(r, p, ids) {
   if (!r.table) {
     r.lastTable = null;
     r.lastTrickShow = [];
+    noteAiLeadClear(r, p, cards);
   }
   p.hand = p.hand.filter((card) => !uniq.includes(card.id));
   r.table = { player: p.id, cards, combo: c };
   r.passes = 0;
+  noteAiPlay(r, cards);
   if (!r.trickLog) r.trickLog = [];
   r.trickLog.push({
     playerId: p.id,
@@ -891,6 +944,7 @@ function pass(r, p) {
   if (!r.started || r.players[r.turn].id !== p.id) throw Error('还没轮到你');
   if (!r.table) throw Error('首出不能过');
   r.passes++;
+  noteAiPass(r, p);
   if (!r.trickLog) r.trickLog = [];
   r.trickLog.push({ playerId: p.id, name: p.name, pass: true, label: '不出', cards: [] });
   r.message = `${p.name}${p.bot ? '（AI）' : ''} 不出`;
@@ -1027,9 +1081,15 @@ module.exports.pickBeat = ai.pickBeat;
 module.exports.feedKindForCount = ai.feedKindForCount;
 module.exports.wildSpendCost = ai.wildSpendCost;
 module.exports.shapeBreakCost = ai.shapeBreakCost;
+module.exports.comboEquityCost = ai.comboEquityCost;
+module.exports.keyCardOpportunityCost = ai.keyCardOpportunityCost;
+module.exports.leftoverDelta = ai.leftoverDelta;
+module.exports.isStrongFive = ai.isStrongFive;
 module.exports.countWilds = ai.countWilds;
 module.exports.handStrength = ai.handStrength;
 module.exports.assignRoles = ai.assignRoles;
 module.exports.personaFor = ai.personaFor;
 module.exports.intelFor = ai.intelFor;
 module.exports.placeEliteBots = placeEliteBots;
+module.exports.emptyAiSense = emptyAiSense;
+module.exports.ensureAiSense = ensureAiSense;
