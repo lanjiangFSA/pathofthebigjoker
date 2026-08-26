@@ -340,6 +340,57 @@ check('Phase A: AI prefers small pair over leading 33322', () => {
   );
 });
 
+check('elite avoids volunteering 22255 (trump triple + junk pair)', () => {
+  const cards = [C('2'), C('2', '♥'), C('2', '♦'), C('5'), C('5', '♥')];
+  const c = combo(cards, '2');
+  const opt = { cards, c };
+  assert.ok(c && c.kind === KIND.fullHouse && c.face === '2');
+  assert.ok(keyCardOpportunityCost(opt, '2') >= 30, 'burning three 将 on 55 is costly');
+  assert.ok(!isStrongFive(c, '2', cards), '22255 not a volunteer strong five');
+  const strong = {
+    cards: [C('2'), C('2', '♥'), C('2', '♦'), C('K'), C('K', '♥')],
+    c: combo([C('2'), C('2', '♥'), C('2', '♦'), C('K'), C('K', '♥')], '2'),
+  };
+  assert.ok(isStrongFive(strong.c, '2', strong.cards), '222KK still strong');
+
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const bot = r.players[0];
+  bot.name = '朝日';
+  bot.role = 'main';
+  bot.hand = [
+    C('2'),
+    C('2', '♥'),
+    C('2', '♦'),
+    C('5'),
+    C('5', '♥'),
+    C('8'),
+    C('8', '♣'),
+    C('3'),
+    C('4'),
+    C('6'),
+    C('7'),
+    C('9'),
+    C('10'),
+    C('J'),
+    C('Q'),
+  ];
+  r.players.forEach((p, i) => {
+    if (i === 0) return;
+    p.hand = Array.from({ length: 18 }, (_, k) => C(String((k % 8) + 3)));
+  });
+  r.turn = 0;
+  r.table = null;
+  const opts = candidates(bot.hand, r.trump, null);
+  const lead = pickLead(opts, r, bot, 0, personaFor('朝日'));
+  assert.ok(lead);
+  assert.ok(
+    !(lead.c.kind === KIND.fullHouse && lead.c.face === '2' && lead.cards.some((x) => x.r === '5')),
+    '朝日 should not volunteer 22255'
+  );
+});
+
 check('Phase A: A2345 burns A/2 — high opportunity vs orphan 3', () => {
   const hand = [C('A'), C('2', '♥'), C('3', '♦'), C('4', '♣'), C('5'), C('7'), C('9')];
   const straight = {

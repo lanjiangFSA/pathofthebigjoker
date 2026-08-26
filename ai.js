@@ -296,6 +296,29 @@ function faceNat(face) {
   return naturalPower(face);
 }
 
+/** Natural power of the pair half in a 三带两 (not the triple face). */
+function fullHouseSideNat(opt, trump = '2') {
+  const c = opt?.c;
+  if (!c || c.kind !== KIND.fullHouse) return -1;
+  const by = {};
+  let wilds = 0;
+  for (const card of opt.cards || []) {
+    if (isWild(card)) {
+      wilds++;
+      continue;
+    }
+    by[card.r] = (by[card.r] || 0) + 1;
+  }
+  for (const [f, n] of Object.entries(by)) {
+    if (f === c.face) continue;
+    return faceNat(f);
+  }
+  // Pair filled by wilds → treat as strong attachment
+  if (wilds >= 2) return 14;
+  void trump;
+  return -1;
+}
+
 /** Soft cost: combo kind ≠ fighting strength (e.g. 33322 is a weak full house). */
 function comboEquityCost(opt, trump = '2') {
   const c = opt?.c;
@@ -303,7 +326,13 @@ function comboEquityCost(opt, trump = '2') {
   if (c.kind < KIND.mixedStraight) return 0;
 
   if (c.kind === KIND.fullHouse) {
-    if (c.face === trump) return 0;
+    if (c.face === trump) {
+      // Fighting strength is high, but junk pair attachment is handled in key cost
+      const side = fullHouseSideNat(opt, trump);
+      if (side >= 0 && side <= 4) return 8;
+      if (side >= 0 && side <= 7) return 3;
+      return 0;
+    }
     const nat = faceNat(c.face);
     if (nat <= 2) return 58;
     if (nat <= 5) return 38;
@@ -370,6 +399,13 @@ function keyCardOpportunityCost(opt, trump = '2') {
 
   if (c.kind === KIND.fullHouse && c.face !== trump && trumpUsed) {
     cost += trumpUsed * (nat <= 5 ? 30 : nat <= 8 ? 16 : 8);
+  }
+  // 222 + weak pair (e.g. 22255): nuclear 将 triple wasted as five with junk attachment
+  if (c.kind === KIND.fullHouse && c.face === trump && trumpUsed >= 3) {
+    const side = fullHouseSideNat(opt, trump);
+    if (side >= 0 && side < 9) {
+      cost += trumpUsed * (side <= 4 ? 14 : side <= 7 ? 9 : 5);
+    }
   }
   if (c.kind >= KIND.mixedStraight && c.kind <= KIND.flush) {
     const weak = (c.rank || 0) < 60;
@@ -651,19 +687,25 @@ function racingPartner(r, seat) {
   return best;
 }
 
-function isStrongFive(c, trump = '2') {
+function isStrongFive(c, trump = '2', cards = null) {
   if (!c || c.kind < KIND.fullHouse) return false;
   if (c.kind >= KIND.straightFlush) return true;
   if (c.kind >= KIND.fourPlus) {
     return c.face === trump || faceNat(c.face) >= 8;
   }
-  return c.face === trump || faceNat(c.face) >= 9;
+  if (c.face === trump) {
+    if (!cards?.length) return true;
+    const side = fullHouseSideNat({ cards, c }, trump);
+    // 222KK+ ok; 22255 is fighting-strong but not a "good strong five" to volunteer
+    return side < 0 || side >= 9;
+  }
+  return faceNat(c.face) >= 9;
 }
 
 function hasStrongReturn(options, trump = '2') {
   return options.some(
     (o) =>
-      (o.c.kind >= KIND.fourPlus && isStrongFive(o.c, trump)) ||
+      (o.c.kind >= KIND.fourPlus && isStrongFive(o.c, trump, o.cards)) ||
       (o.c.kind === KIND.single && o.c.rank >= 90)
   );
 }
@@ -825,7 +867,7 @@ function pickLead(options, r, p, seat, persona) {
 
   const fives = options.filter((o) => o.cards.length === 5);
   const midFives = fives.filter((o) => o.c.kind <= KIND.flush && o.c.rank >= 55 && o.c.rank < 75);
-  const strongFives = fives.filter((o) => isStrongFive(o.c, r.trump));
+  const strongFives = fives.filter((o) => isStrongFive(o.c, r.trump, o.cards));
   const pairs = options.filter((o) => o.c.kind === KIND.pair);
   const triples = options.filter((o) => o.c.kind === KIND.triple);
   const singles = options.filter((o) => o.c.kind === KIND.single);
@@ -854,7 +896,7 @@ function pickLead(options, r, p, seat, persona) {
         pickFrom(triples, mode) ||
         pickFrom(strongFives, mode) ||
         pickFrom(
-          fives.filter((o) => o.c.kind >= KIND.flush && isStrongFive(o.c, r.trump)),
+          fives.filter((o) => o.c.kind >= KIND.flush && isStrongFive(o.c, r.trump, o.cards)),
           mode
         ) ||
         pickFrom(smallSingles, soft) ||
@@ -894,7 +936,7 @@ function pickLead(options, r, p, seat, persona) {
       const five =
         pickFrom(midFives, soft) ||
         pickFrom(
-          fives.filter((o) => !isStrongFive(o.c, r.trump) && o.c.rank >= 50 && comboEquityCost(o, r.trump) < 25),
+          fives.filter((o) => !isStrongFive(o.c, r.trump, o.cards) && o.c.rank >= 50 && comboEquityCost(o, r.trump) < 25),
           soft
         );
       if (five) return five;
@@ -995,7 +1037,7 @@ function pickLead(options, r, p, seat, persona) {
   const safe = nonBomb.filter(
     (o) =>
       o.cards.length !== 5 ||
-      isStrongFive(o.c, r.trump) ||
+      isStrongFive(o.c, r.trump, o.cards) ||
       (!elite && p.role === 'main' && o.c.kind <= KIND.flush && o.c.rank >= 55 && o.c.rank < 70)
   );
   return pickFrom(safe.length ? safe : nonBomb.length ? nonBomb : options, hard);
@@ -1129,6 +1171,7 @@ module.exports = {
   feedKindForCount,
   enemyShortest,
   isStrongFive,
+  fullHouseSideNat,
   teammatePassLens,
   selfIsStrong,
   teamScoreBiasFor,
