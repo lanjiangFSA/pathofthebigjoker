@@ -20,6 +20,13 @@ const {
   countWilds,
   shapeBreakCost,
   personaFor,
+  comboEquityCost,
+  keyCardOpportunityCost,
+  leftoverDelta,
+  isStrongFive,
+  pass,
+  play,
+  ensureAiSense,
 } = require('./logic');
 
 function C(r, s = '♠') {
@@ -110,10 +117,12 @@ check('feed teammate: support leads preferred length when main short', () => {
   start(r);
   const support = r.players[0];
   const main = r.players[2];
+  support.name = '老克勒';
   support.role = 'support';
   main.role = 'main';
-  // Keep other seats fat so racingPartner locks onto main (8)
+  // Avoid facingElite rattle so botMove matches pickLead
   r.players.forEach((p, i) => {
+    if (p.name === '朝日') p.name = '阿根';
     if (i === 0 || i === 2) return;
     p.hand = Array.from({ length: 20 }, (_, k) => C(String((k % 8) + 3)));
   });
@@ -124,21 +133,21 @@ check('feed teammate: support leads preferred length when main short', () => {
     C('3', '♦'),
     C('4'),
     C('4', '♥'),
-    C('5'),
-    C('6'),
-    C('7'),
-    C('8'),
-    C('9'),
-    C('10'),
-    C('J'),
-    C('Q'),
-    C('K'),
-    C('A'),
+    C('6', '♣'),
+    C('8', '♦'),
+    C('9', '♥'),
+    C('10', '♣'),
+    C('J', '♦'),
+    C('Q', '♥'),
+    C('K', '♣'),
+    C('5', '♦'),
+    C('7', '♥'),
+    C('A', '♣'),
   ];
   r.turn = 0;
   r.table = null;
   const opts = candidates(support.hand, r.trump, null);
-  const lead = pickLead(opts, r, support, 0);
+  const lead = pickLead(opts, r, support, 0, personaFor('老克勒'));
   assert.ok(lead, 'should lead');
   assert.strictEqual(lead.cards.length, 3, '8-card partner → feed 3-way');
   botMove(r, support);
@@ -162,6 +171,7 @@ check('AI does not lead low pair padded with joker', () => {
   addPlayer(r, '人');
   start(r);
   const bot = r.players[0];
+  bot.name = '麒麟';
   bot.role = 'support';
   // One 5 + 大怪 can form 对5, but should lead a natural small single instead
   bot.hand = [
@@ -183,7 +193,7 @@ check('AI does not lead low pair padded with joker', () => {
   r.turn = 0;
   r.table = null;
   const opts = candidates(bot.hand, r.trump, null);
-  const lead = pickLead(opts, r, bot, 0);
+  const lead = pickLead(opts, r, bot, 0, personaFor('麒麟'));
   assert.ok(lead, 'should lead');
   assert.ok(wildSpendCost(lead) <= 18, 'must not dump 大怪 on weak shape');
   if (lead.c.kind === KIND.pair && lead.c.face === '5') {
@@ -272,6 +282,171 @@ check('placeEliteBots: 麒麟 on host team, 朝日 on foe', () => {
   assert.ok(r.players.some((p, i) => p.bot && p.name === '麒麟' && teamOf(i) === myTeam));
   assert.ok(r.players.some((p, i) => p.bot && p.name === '朝日' && teamOf(i) === foe));
   void placeEliteBots;
+});
+
+// ——— Phase A: equity / opportunity / leftover ———
+check('Phase A: 33322 has high equity cost; not isStrongFive', () => {
+  const cards = [C('3'), C('3', '♥'), C('3', '♦'), C('2'), C('2', '♥')];
+  const c = combo(cards, '2');
+  assert.ok(c && c.kind === KIND.fullHouse);
+  const opt = { cards, c };
+  assert.ok(comboEquityCost(opt, '2') >= 50, 'weak full house costly');
+  assert.ok(!isStrongFive(c, '2'), '33322 is not strong');
+  const strong = {
+    cards: [C('K'), C('K', '♥'), C('K', '♦'), C('5'), C('5', '♥')],
+    c: combo([C('K'), C('K', '♥'), C('K', '♦'), C('5'), C('5', '♥')], '2'),
+  };
+  assert.ok(isStrongFive(strong.c, '2'));
+  assert.ok(comboEquityCost(opt, '2') > comboEquityCost(strong, '2'));
+});
+
+check('Phase A: AI prefers small pair over leading 33322', () => {
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const bot = r.players[0];
+  bot.name = '麒麟';
+  bot.role = 'support';
+  bot.hand = [
+    C('3'),
+    C('3', '♥'),
+    C('3', '♦'),
+    C('2'),
+    C('2', '♥'),
+    C('8'),
+    C('8', '♥'),
+    C('4'),
+    C('5'),
+    C('6'),
+    C('7'),
+    C('9'),
+    C('10'),
+    C('J'),
+    C('Q'),
+  ];
+  r.players[2].role = 'main';
+  r.players[2].hand = Array.from({ length: 18 }, (_, i) => C(String((i % 7) + 3)));
+  r.players.forEach((p, i) => {
+    if (i !== 0 && i !== 2) p.hand = Array.from({ length: 20 }, (_, k) => C(String((k % 8) + 3)));
+  });
+  r.turn = 0;
+  r.table = null;
+  const opts = candidates(bot.hand, r.trump, null);
+  const lead = pickLead(opts, r, bot, 0);
+  assert.ok(lead);
+  assert.ok(
+    !(lead.c.kind === KIND.fullHouse && lead.c.face === '3'),
+    'must not open with 33322'
+  );
+});
+
+check('Phase A: A2345 burns A/2 — high opportunity vs orphan 3', () => {
+  const hand = [C('A'), C('2', '♥'), C('3', '♦'), C('4', '♣'), C('5'), C('7'), C('9')];
+  const straight = {
+    cards: [hand[0], hand[1], hand[2], hand[3], hand[4]],
+    c: combo([hand[0], hand[1], hand[2], hand[3], hand[4]], '2'),
+  };
+  const orphan = { cards: [hand[5]], c: combo([hand[5]], '2') };
+  assert.ok(straight.c && straight.c.kind === KIND.mixedStraight);
+  assert.ok(keyCardOpportunityCost(straight, '2') > 20, 'A+2 in weak straight costly');
+  assert.ok(
+    leftoverDelta(straight, hand, '2') + keyCardOpportunityCost(straight, '2') + comboEquityCost(straight, '2') >
+      leftoverDelta(orphan, hand, '2') + 5,
+    'A2345 worse than dumping orphan'
+  );
+});
+
+check('Phase A: padding 大王 on mid pair has key opportunity cost', () => {
+  const waste = { cards: [C('9'), W()], c: combo([C('9'), W()], '2') };
+  const pureBig = { cards: [W()], c: combo([W()], '2') };
+  assert.ok(keyCardOpportunityCost(waste, '2') >= 20);
+  assert.strictEqual(keyCardOpportunityCost(pureBig, '2'), 0);
+  assert.ok(wildSpendCost(waste) + keyCardOpportunityCost(waste, '2') > 30);
+});
+
+// ——— Phase B: pass memory / switch line ———
+check('Phase B: teammate pass on pairs → avoid reopening pairs', () => {
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const support = r.players[0];
+  const main = r.players[2];
+  support.name = '老克勒';
+  support.role = 'support';
+  main.role = 'main';
+  // 9 cards → feed table prefers pairs; pass-memory should override to non-pair
+  main.hand = main.hand.slice(0, 9);
+  r.players.forEach((p, i) => {
+    if (i === 0 || i === 2) return;
+    p.hand = Array.from({ length: 20 }, (_, k) => C(String((k % 8) + 3)));
+  });
+  support.hand = [
+    C('3'),
+    C('3', '♥'),
+    C('3', '♦'),
+    C('8'),
+    C('8', '♥'),
+    C('4'),
+    C('5'),
+    C('6'),
+    C('7'),
+    C('9'),
+    C('10'),
+    C('J'),
+    C('Q'),
+    C('K'),
+    C('A'),
+  ];
+  ensureAiSense(r);
+  r.aiSense.teammatePassByLen.red[2] = 2;
+  r.turn = 0;
+  r.table = null;
+  const opts = candidates(support.hand, r.trump, null);
+  const lead = pickLead(opts, r, support, 0, personaFor('老克勒'));
+  assert.ok(lead);
+  assert.notStrictEqual(lead.cards.length, 2, 'after teammate pair-pass, avoid leading pairs');
+});
+
+check('Phase B: pass() records teammate pass length in aiSense', () => {
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const leadP = r.players[0];
+  const mate = r.players[2];
+  const pair = [C('8'), C('8', '♥')];
+  leadP.hand = [...pair, C('3'), C('4')];
+  mate.hand = [C('A'), C('A', '♥'), C('K'), C('Q')];
+  r.turn = 0;
+  r.table = null;
+  play(r, leadP, [pair[0].id, pair[1].id]);
+  r.turn = 2;
+  pass(r, mate);
+  assert.ok(r.aiSense.teammatePassByLen.red[2] >= 1, 'pair pass recorded for red');
+});
+
+// ——— Phase C / D smoke ———
+check('Phase C/D: aiSense tracks played key cards; short hand still picks', () => {
+  const r = newRoom();
+  addPlayer(r, '人');
+  start(r);
+  const bot = r.players[0];
+  bot.name = '麒麟';
+  bot.role = 'main';
+  bot.hand = [C('3'), C('4'), C('5'), C('6'), C('7'), C('8'), W(), C('9')];
+  r.players.forEach((p, i) => {
+    if (i === 0) return;
+    p.hand = Array.from({ length: i % 2 ? 4 : 15 }, (_, k) => C(String((k % 8) + 3)));
+  });
+  ensureAiSense(r);
+  r.aiSense.played.big = 4;
+  r.scores = { red: 0, blue: 8 };
+  r.matchRound = 5;
+  r.turn = 0;
+  r.table = null;
+  const opts = candidates(bot.hand, r.trump, null);
+  const lead = pickLead(opts, r, bot, 0);
+  assert.ok(lead);
+  assert.ok(lead.cards.length >= 1);
 });
 
 check('multi-round AI game completes', () => {

@@ -15,23 +15,39 @@
 
 服务端约 1.8–2.5 秒调度一次 `botMove`（仅剩 AI 时更快）；人类超时走 `autoAct`，与 bot 策略无关。
 
+对局中维护 **`r.aiSense`**：队友对各长度「不要」次数、已打出的大小怪/将/A，供换线与软记牌使用。
+
 ## 2. 角色：主攻 / 辅助
 
 发牌后 `assignRoles`：每队三人按 `handStrength` 排序——最强为 **main（主攻）**，其余为 **support（辅助）**。
 
-## 3. 牌力：`wildSpendCost` + `shapeBreakCost`
+## 3. 牌力估值（软分，非绝对禁令）
 
-- **惜怪** `wildSpendCost`：怪垫低对/三代价高；纯怪出手为 0。
-- **拆型** `shapeBreakCost`：拆四张/三张/对子去出更小路、用大红怪垫中低五路代价高；鼓励出孤儿单。
-- `pickFrom` 按 `wild + shape`（及弱五路惩罚）排序；跟牌额外偏好「刚好压过」。
+| 项 | 作用 |
+|----|------|
+| `wildSpendCost` | 怪垫低对/三代价高；纯怪出手为 0 |
+| `shapeBreakCost` | 拆四/三/对去出更小路代价高 |
+| `comboEquityCost` | **牌型等级 ≠ 牌力**：如 `33322` 三带两代价很高，不算「强五路」 |
+| `keyCardOpportunityCost` | 大王/小王/将/A 垫进弱型的机会成本（可残局理性烧掉） |
+| `leftoverDelta` | 出完后余手「散度」变化，鼓励整型保留 |
+
+`pickFrom` / `scoreMove` 综合以上，并加弱五路惩罚、刚好压过、短牌浅层优选。
 
 ## 4. 领出 / 跟牌（摘要）
 
-- 压制短敌、按张数喂队友、慎开弱杂顺/弱同花（默认不从 A2345 一类最弱五路开局）。
+- 压制短敌、按张数喂队友、慎开弱杂顺/弱同花。
+- **换线**：队友刚对某长度（如对子）连续不要时，弱牌辅助少再开该长度，改喂单/三/五。
+- **强弱分流**：自己牌强可抢控冲名次；弱则优先给短队友可接的路。
 - 队友对子/三张/五路默认不压；仅小单接牌喂主攻或阻敌残局。
 - 非残局：怪花费或拆型超阈值则 **不要**。
 
-## 5. 性格与智能分（概率倾向）
+## 5. 队分与记牌（轻量）
+
+- **队分倾向**：结合敌我剩余张数、本赛段比分落后幅度，微调「走完 / 喂队友 / 留炸弹」权重；越落后越敢推进。
+- **记牌**：统计已亮出的大小怪、将、A；控制牌仍多时少开易被砸的中对，控制牌少时略敢顶大单。
+- **残局**：手牌 ≤12 时在同分候选里浅比较余手难度（非完整搜索）。
+
+## 6. 性格与智能分（概率倾向）
 
 座位旁显示 **智能 n/5**（`intel`）。按昵称挂参数；**每手独立掷骰**（非绝对）。
 
@@ -45,13 +61,14 @@
 
 每局开局：`placeEliteBots` 保证房主队有 **麒麟**、对队有 **朝日**。
 
-## 6. 关联函数
+## 7. 关联函数
 
 | 函数 | 作用 |
 |------|------|
 | `handStrength` / `assignRoles` | 主攻辅助（精英优先主攻） |
-| `candidates` | 合法着法 |
-| `wildSpendCost` / `shapeBreakCost` / `pickFrom` | 代价与择优 |
+| `candidates` | 合法着法（大手牌时压缩五路枚举以保性能） |
+| `wildSpendCost` / `shapeBreakCost` / `comboEquityCost` / `keyCardOpportunityCost` / `leftoverDelta` | 代价与余手 |
 | `personaFor` / `intelFor` / `PERSONAS` | 性格与智能分 |
 | `effectivePersona` | 带飞队友 / 震慑对手 |
+| `teammatePassLens` / `teamScoreBiasFor` / `cardSenseBiasFor` | 换线、队分、记牌软偏置 |
 | `pickLead` / `pickBeat` / `botMove` | 决策 |
